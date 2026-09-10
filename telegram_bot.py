@@ -563,24 +563,28 @@ class SentinelTelegramBot:
             self.client.send_message(chat_id, "✅ Không có bản cập nhật mới nào để tải.")
             return
 
-        self.client.send_message(chat_id, f"⏳ Đang tải bản cập nhật `v{new_v}` từ GitHub và tạo bản sao lưu an toàn...")
+        self.client.send_message(chat_id, f"⏳ Đang tải bản cập nhật `v{new_v}` từ GitHub và chuẩn bị nâng cấp...")
         try:
-            zip_dest = Config.STAGING_DIR / f"update_v{new_v}.zip"
             Config.ensure_directories()
+            ext = ".exe" if dl_url.endswith(".exe") or getattr(sys, 'frozen', False) else ".zip"
+            dest_file = Config.DATA_DIR / f"update_v{new_v}{ext}"
             
-            # Download file
-            req = requests.get(dl_url, stream=True, timeout=60)
-            with open(zip_dest, "wb") as f:
-                for chunk in req.iter_content(chunk_size=8192):
+            headers = {"User-Agent": "VNServerSentinel"}
+            req = requests.get(dl_url, headers=headers, stream=True, timeout=120, allow_redirects=True)
+            with open(dest_file, "wb") as f:
+                for chunk in req.iter_content(chunk_size=16384):
                     f.write(chunk)
 
-            ok, apply_msg = updater.apply_update_from_zip(zip_dest, new_v)
+            ok, apply_msg = updater.apply_update(dest_file, new_v)
             self.client.send_message(chat_id, apply_msg)
 
             if ok:
-                # Restart process
-                self.client.send_message(chat_id, "🔄 Khởi động lại ứng dụng với phiên bản mới...")
-                python = sys.executable
-                os.execl(python, python, *sys.argv)
+                self.client.send_message(chat_id, "🔄 Đang khởi động lại ứng dụng với phiên bản mới...")
+                if getattr(sys, 'frozen', False):
+                    subprocess.Popen([sys.executable] + sys.argv[1:])
+                else:
+                    python = sys.executable
+                    os.execl(python, python, *sys.argv)
+                sys.exit(0)
         except Exception as e:
             self.client.send_message(chat_id, f"❌ Lỗi trong quá trình cập nhật: {e}")

@@ -58,12 +58,23 @@ def check_github_update() -> tuple[bool, Optional[str], Optional[str], str]:
 
             curr_ver = get_current_version().lstrip("v").strip()
             if latest_tag and latest_tag != curr_ver:
-                # Find zip asset or default zipball
                 download_url = None
-                for asset in assets:
-                    if asset.get("name", "").endswith(".zip"):
-                        download_url = asset.get("browser_download_url")
-                        break
+                is_frozen = getattr(sys, 'frozen', False)
+                if is_frozen:
+                    for asset in assets:
+                        if asset.get("name") == "PcManager.exe":
+                            download_url = asset.get("browser_download_url")
+                            break
+                if not download_url:
+                    for asset in assets:
+                        if asset.get("name", "").endswith(".zip"):
+                            download_url = asset.get("browser_download_url")
+                            break
+                if not download_url:
+                    for asset in assets:
+                        if asset.get("name") == "PcManager.exe":
+                            download_url = asset.get("browser_download_url")
+                            break
                 if not download_url:
                     download_url = data.get("zipball_url")
 
@@ -89,12 +100,10 @@ def get_version_info() -> Dict[str, Any]:
 def backup_current_installation():
     """Backup current source code files to backup folder before updating."""
     Config.ensure_directories()
-    # Clean old backup
     if Config.BACKUP_DIR.exists():
         shutil.rmtree(Config.BACKUP_DIR)
     Config.BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Copy files excluding data, venv, git
     for item in Config.BASE_DIR.iterdir():
         if item.name in ("data", ".git", ".venv", "venv", "__pycache__", "staging", ".env"):
             continue
@@ -105,6 +114,32 @@ def backup_current_installation():
             shutil.copy2(item, dest)
     logger.info("Backup of current version completed successfully.")
 
+def apply_update_exe(new_exe_path: Path, new_version: str) -> tuple[bool, str]:
+    """Apply standalone executable update by swapping binary."""
+    try:
+        current_exe = Path(sys.executable).resolve()
+        bak_exe = current_exe.with_suffix(".exe.bak")
+        if bak_exe.exists():
+            try:
+                bak_exe.unlink()
+            except Exception:
+                pass
+
+        # Windows allows renaming a currently running executable!
+        current_exe.rename(bak_exe)
+        shutil.copy2(new_exe_path, current_exe)
+
+        VERSION_FILE.write_text(new_version, encoding="utf-8")
+        UPDATE_FLAG.write_text(json.dumps({
+            "version": new_version,
+            "timestamp": str(datetime.now()) if 'datetime' in globals() else ""
+        }), encoding="utf-8")
+
+        return True, f"✅ Đã nâng cấp thành công PcManager lên v{new_version}!"
+    except Exception as e:
+        logger.error(f"Failed to apply exe update: {e}")
+        return False, f"Lỗi cập nhật file exe: {e}"
+
 def apply_update_from_zip(zip_path: Path, new_version: str) -> tuple[bool, str]:
     """
     Extracts update zip, replaces source files, sets watchdog flag.
@@ -113,18 +148,19 @@ def apply_update_from_zip(zip_path: Path, new_version: str) -> tuple[bool, str]:
     try:
         backup_current_installation()
 
-        # Extract to staging
-        if Config.STAGING_DIR.exists():
-            shutil.rmtree(Config.STAGING_DIR)
-        Config.STAGING_DIR.mkdir(parents=True, exist_ok=True)
+        # Extract to staging/extracted subfolder so we NEVER delete the zip_path itself!
+        extract_dir = Config.STAGING_DIR / "extracted"
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        extract_dir.mkdir(parents=True, exist_ok=True)
 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(Config.STAGING_DIR)
+            zip_ref.extractall(extract_dir)
 
         # Locate root directory inside zip if it was nested
-        extracted_root = Config.STAGING_DIR
-        subdirs = [p for p in Config.STAGING_DIR.iterdir() if p.is_dir()]
-        if len(subdirs) == 1 and not (Config.STAGING_DIR / "main.py").exists():
+        extracted_root = extract_dir
+        subdirs = [p for p in extract_dir.iterdir() if p.is_dir()]
+        if len(subdirs) == 1 and not (extract_dir / "main.py").exists():
             extracted_root = subdirs[0]
 
         # Copy new files into BASE_DIR
@@ -148,12 +184,18 @@ def apply_update_from_zip(zip_path: Path, new_version: str) -> tuple[bool, str]:
             "timestamp": str(Path.ctime(VERSION_FILE))
         }), encoding="utf-8")
 
-        return True, f"Đã áp dụng bản cập nhật v{new_version}. Khởi động lại dịch vụ..."
+        return True, f"✅ Đã áp dụng bản cập nhật v{new_version}. Đang khởi động lại..."
 
     except Exception as e:
         logger.error(f"Failed to apply update: {e}")
         rollback_to_backup()
         return False, f"Lỗi cập nhật: {e}. Đã tự động rollback về bản cũ!"
+
+def apply_update(downloaded_file: Path, new_version: str) -> tuple[bool, str]:
+    """Unified entrypoint to apply update based on downloaded asset type."""
+    if downloaded_file.suffix.lower() == ".exe":
+        return apply_update_exe(downloaded_file, new_version)
+    return apply_update_from_zip(downloaded_file, new_version)
 
 def rollback_to_backup() -> bool:
     """Restores previously backed up files if the update crashes."""

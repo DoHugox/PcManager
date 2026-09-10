@@ -1529,10 +1529,36 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         elif url.path == "/api/update":
             has_update, new_ver, dl_url, notes = updater.check_github_update()
-            if not has_update:
+            if not has_update or not dl_url:
                 self._send_json({"success": False, "message": "Hiện tại bạn đang ở phiên bản mới nhất."})
             else:
-                self._send_json({"success": True, "message": f"Đang chuẩn bị cập nhật lên v{new_ver}..."})
+                self._send_json({"success": True, "message": f"🚀 Đang tải và áp dụng bản cập nhật v{new_ver}. Ứng dụng sẽ tự khởi động lại sau giây lát..."})
+
+                def _do_update():
+                    import requests
+                    import time
+                    try:
+                        time.sleep(1)
+                        Config.ensure_directories()
+                        ext = ".exe" if dl_url.endswith(".exe") or getattr(sys, 'frozen', False) else ".zip"
+                        dest_file = Config.DATA_DIR / f"update_v{new_ver}{ext}"
+                        headers = {"User-Agent": "VNServerSentinel"}
+                        req = requests.get(dl_url, headers=headers, stream=True, timeout=120, allow_redirects=True)
+                        with open(dest_file, "wb") as f:
+                            for chunk in req.iter_content(chunk_size=16384):
+                                f.write(chunk)
+                        ok, msg = updater.apply_update(dest_file, new_ver)
+                        if ok:
+                            if getattr(sys, 'frozen', False):
+                                subprocess.Popen([sys.executable] + sys.argv[1:])
+                            else:
+                                python = sys.executable
+                                os.execl(python, python, *sys.argv)
+                            sys.exit(0)
+                    except Exception as e:
+                        logger.error(f"Web update error: {e}")
+
+                threading.Thread(target=_do_update, daemon=True).start()
 
     def _send_json(self, data: dict | list):
         self.send_response(200)
