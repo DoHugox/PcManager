@@ -12,6 +12,7 @@ a = Analysis(
         ('bios_helper.ps1', '.'),
         ('VERSION', '.'),
         ('HUONG_DAN_CAI_DAT.md', '.'),
+        ('.env.example', '.'),
     ],
     hiddenimports=[
         'upnpy',

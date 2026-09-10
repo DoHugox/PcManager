@@ -4,10 +4,44 @@ Loads settings from .env file or environment variables.
 """
 
 import os
+import sys
 from pathlib import Path
 
-# Base directory of the project
-BASE_DIR = Path(__file__).resolve().parent
+# Base directory: handles both python script and frozen PyInstaller .exe
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
+
+def ensure_env_file():
+    """Ensure .env exists next to executable; create default if missing."""
+    env_path = BASE_DIR / ".env"
+    if not env_path.exists():
+        example_path = BASE_DIR / ".env.example"
+        if example_path.exists():
+            try:
+                import shutil
+                shutil.copy2(example_path, env_path)
+                return
+            except Exception:
+                pass
+        # Auto-generate default configured .env if not found
+        try:
+            default_env = (
+                "# PcManager - Configuration\n"
+                "TELEGRAM_BOT_TOKEN=8645431730:AAGxEFDUP_MaHb7IpKW2Py6glYd4Iv17hhc\n"
+                "TELEGRAM_ADMIN_CHAT_ID=5284796005\n"
+                "ADMIN_PIN=1521\n"
+                "HEARTBEAT_URL=https://hc-ping.com/512cc2bf-1e4a-41e1-87ad-70becbe25f5b\n"
+                "GITHUB_REPO=DoHugox/PcManager\n"
+                "AUTO_UPDATE_ENABLED=true\n"
+                "CHECK_INTERVAL_SECONDS=60\n"
+            )
+            env_path.write_text(default_env, encoding="utf-8")
+        except Exception:
+            pass
+
+ensure_env_file()
 
 def load_dotenv_fallback():
     """Fallback .env parser if python-dotenv is not yet installed."""
@@ -31,15 +65,15 @@ class Config:
     BASE_DIR: Path = BASE_DIR
 
     # Telegram Bot Settings
-    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    TELEGRAM_ADMIN_CHAT_ID: str = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "").strip()
-    ADMIN_PIN: str = os.getenv("ADMIN_PIN", "1234").strip()
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "8645431730:AAGxEFDUP_MaHb7IpKW2Py6glYd4Iv17hhc").strip()
+    TELEGRAM_ADMIN_CHAT_ID: str = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "5284796005").strip()
+    ADMIN_PIN: str = os.getenv("ADMIN_PIN", "1521").strip()
 
     # Cloud Heartbeat (Healthchecks.io / Uptime Kuma push)
-    HEARTBEAT_URL: str = os.getenv("HEARTBEAT_URL", "").strip()
+    HEARTBEAT_URL: str = os.getenv("HEARTBEAT_URL", "https://hc-ping.com/512cc2bf-1e4a-41e1-87ad-70becbe25f5b").strip()
 
     # GitHub repository for Safe Auto-Update (owner/repo)
-    GITHUB_REPO: str = os.getenv("GITHUB_REPO", "owner/VNServerSentinel").strip()
+    GITHUB_REPO: str = os.getenv("GITHUB_REPO", "DoHugox/PcManager").strip()
     AUTO_UPDATE_ENABLED: bool = os.getenv("AUTO_UPDATE_ENABLED", "true").lower() in ("true", "1", "yes")
 
     # Intervals & Security
