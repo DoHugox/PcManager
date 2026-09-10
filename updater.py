@@ -73,6 +73,19 @@ def check_github_update() -> tuple[bool, Optional[str], Optional[str], str]:
         logger.error(f"Error checking GitHub update: {e}")
         return False, None, None, f"Lỗi kiểm tra cập nhật: {e}"
 
+def get_version_info() -> Dict[str, Any]:
+    """Return dictionary with version status for UI display."""
+    curr = get_current_version()
+    has_update, new_ver, dl_url, notes = check_github_update()
+    return {
+        "current_version": curr,
+        "has_update": bool(has_update),
+        "latest_version": new_ver or curr,
+        "download_url": dl_url,
+        "release_notes": notes,
+        "repo": Config.GITHUB_REPO
+    }
+
 def backup_current_installation():
     """Backup current source code files to backup folder before updating."""
     Config.ensure_directories()

@@ -102,6 +102,95 @@ def list_directory(target_path: Optional[str] = None) -> tuple[bool, Dict[str, A
         logger.error(f"Error listing directory {target_path}: {e}")
         return False, {}, f"Lỗi đọc thư mục: {e}"
 
+def get_file_type_category(filename: str, is_dir: bool) -> str:
+    """Return categorical string for UI icon display."""
+    if is_dir:
+        return "folder"
+    ext = Path(filename).suffix.lower()
+    if ext in [".txt", ".log", ".md", ".json", ".yaml", ".yml", ".xml", ".csv", ".ini", ".conf", ".cfg"]:
+        return "text"
+    if ext in [".py", ".js", ".html", ".css", ".sh", ".bat", ".ps1", ".cpp", ".c", ".h", ".rs", ".go", ".java"]:
+        return "code"
+    if ext in [".zip", ".rar", ".7z", ".tar", ".gz", ".iso"]:
+        return "archive"
+    if ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp"]:
+        return "image"
+    if ext in [".mp4", ".mkv", ".avi", ".mov", ".mp3", ".wav"]:
+        return "media"
+    if ext in [".exe", ".msi", ".dll", ".bin"]:
+        return "binary"
+    return "file"
+
+def list_directory_web(target_path: Optional[str] = None) -> tuple[bool, Dict[str, Any], str]:
+    """
+    List contents optimized for Web File Explorer:
+    Breadcrumbs, available drives, categorized icons, file size, timestamps.
+    """
+    try:
+        if not target_path or target_path.strip() == "":
+            path_obj = Path.cwd()
+        else:
+            path_obj = Path(target_path).resolve()
+
+        if not path_obj.exists():
+            return False, {}, f"Đường dẫn không tồn tại: {target_path}"
+
+        if not path_obj.is_dir():
+            return False, {}, f"{target_path} là tệp tin, không phải thư mục."
+
+        # Breadcrumbs
+        breadcrumbs = []
+        parts = list(path_obj.parts)
+        curr = Path(parts[0])
+        breadcrumbs.append({"name": parts[0], "path": str(curr)})
+        for part in parts[1:]:
+            curr = curr / part
+            breadcrumbs.append({"name": part, "path": str(curr)})
+
+        items = []
+        for entry in sorted(path_obj.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
+            try:
+                stat = entry.stat()
+                mtime_str = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                is_dir = entry.is_dir()
+                category = get_file_type_category(entry.name, is_dir)
+                items.append({
+                    "name": entry.name,
+                    "path": str(entry),
+                    "is_dir": is_dir,
+                    "category": category,
+                    "size_bytes": stat.st_size if not is_dir else 0,
+                    "size_formatted": format_file_size(stat.st_size) if not is_dir else "-",
+                    "mtime": mtime_str,
+                    "ext": entry.suffix.lower() if not is_dir else ""
+                })
+            except (PermissionError, FileNotFoundError):
+                items.append({
+                    "name": entry.name,
+                    "path": str(entry),
+                    "is_dir": entry.is_dir(),
+                    "category": "locked",
+                    "size_bytes": 0,
+                    "size_formatted": "Locked",
+                    "mtime": "-",
+                    "ext": ""
+                })
+
+        parent_path = str(path_obj.parent) if path_obj.parent != path_obj else None
+
+        return True, {
+            "current_path": str(path_obj),
+            "parent_path": parent_path,
+            "breadcrumbs": breadcrumbs,
+            "drives": get_drives_or_roots(),
+            "items": items,
+            "total_items": len(items)
+        }, "Thành công"
+    except Exception as e:
+        logger.error(f"Error listing directory web {target_path}: {e}")
+        return False, {}, str(e)
+
+
 def read_text_file(target_path: str, max_lines: int = 60) -> tuple[bool, str]:
     """Read the last N lines or first N lines of a text file."""
     try:
