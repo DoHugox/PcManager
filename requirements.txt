@@ -1,0 +1,17 @@
+# VNServerSentinel - Python Dependencies
+# Lightweight, robust, and compatible with Windows 10/11 & Windows Server
+
+# Core system and networking
+requests>=2.31.0
+psutil>=5.9.0
+python-dotenv>=1.0.0
+
+# Desktop screenshot and webcam capture
+Pillow>=10.0.0
+opencv-python>=4.8.0
+
+# Pure Python UPnP library
+upnpy>=1.1.8
+
+# Windows integration (installed automatically on Windows)
+# pywin32>=306

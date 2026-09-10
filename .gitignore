@@ -1,0 +1,23 @@
+# Environment variables and secrets
+.env
+*.env
+
+# Runtime data and state
+data/
+*.log
+state.json
+VERSION.bak
+
+# Python cache and environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+
+# OS specific files
+Thumbs.db
+Desktop.ini
+.DS_Store
