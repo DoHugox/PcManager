@@ -32,7 +32,8 @@ a = Analysis(
         'file_manager',
         'telegram_bot',
         'updater',
-        'remote_desktop'
+        'remote_desktop',
+        'web_dashboard'
     ],
     hookspath=[],
     hooksconfig={},

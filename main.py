@@ -20,6 +20,7 @@ import security_guard
 import system_monitor
 import telegram_bot
 import updater
+import web_dashboard
 
 # Configure logging
 logging.basicConfig(
@@ -67,10 +68,19 @@ class ServerSentinelApp:
         bot_thread = threading.Thread(target=self.bot.run_polling, daemon=True)
         bot_thread.start()
 
-        # 6. Enforce BIOS Power Loss setting (counter dead CMOS battery)
+        # 6. Start Built-in Glassmorphic Web Dashboard
+        web_dashboard.start_dashboard_server(self.upnp_mgr, port=web_dashboard.DASHBOARD_PORT)
+        if "--service" not in sys.argv and "--silent" not in sys.argv:
+            try:
+                import webbrowser
+                threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{web_dashboard.DASHBOARD_PORT}")).start()
+            except Exception:
+                pass
+
+        # 7. Enforce BIOS Power Loss setting (counter dead CMOS battery)
         self._enforce_bios_power_loss()
 
-        # 7. Main Background Periodic Loop (IP tracking, Heartbeat ping)
+        # 8. Main Background Periodic Loop (IP tracking, Heartbeat ping)
         self._run_main_loop()
 
     def _enforce_bios_power_loss(self):
