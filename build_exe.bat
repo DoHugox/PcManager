@@ -20,12 +20,20 @@ pyinstaller --clean PcManager.spec
 if exist "dist\PcManager.exe" (
     echo.
     echo =====================================================================
-    echo   [OK] ĐÓNG GÓI THÀNH CÔNG RỰC RỠ!
-    echo   File thực thi duy nhất được lưu tại:
-    echo   ---^> dist\PcManager.exe
+    echo   [OK] ĐÃ TẠO FILE THỰC THI: dist\PcManager.exe (CÓ ICON)
+    echo =====================================================================
+    
+    :: Kiểm tra nếu máy có Inno Setup để tạo file Setup Wizard
+    if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" (
+        echo.
+        echo [+] Đang tạo bộ cài đặt chuyên nghiệp PcManager_Setup.exe...
+        "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+        if exist "dist\PcManager_Setup.exe" (
+            echo   [OK] ĐÃ TẠO BỘ CÀI ĐẶT CHUẨN WINDOWS: dist\PcManager_Setup.exe
+        )
+    )
     echo.
-    echo   Bây giờ trên máy tính ở Việt Nam, bạn KHÔNG CẦN cài Python nữa!
-    echo   Chỉ cần copy file PcManager.exe kèm file .env là chạy ngay!
+    echo   Tất cả file sẵn sàng trong thư mục "dist\".
     echo =====================================================================
 ) else (
     echo.

@@ -27,31 +27,37 @@ jobs:
         python -m pip install --upgrade pip
         pip install pyinstaller pywin32 -r requirements.txt
 
-    - name: Build Standalone PcManager.exe
+    - name: Install Inno Setup Compiler
+      run: choco install innosetup --no-progress
+
+    - name: Build Standalone PcManager.exe with Custom Icon
       run: |
         pyinstaller --clean PcManager.spec
 
-    - name: Verify PcManager.exe Exists
+    - name: Build Windows Installer Wizard (PcManager_Setup.exe)
       run: |
-        if (Test-Path "dist/PcManager.exe") {
-            Write-Host "Build Succeeded! File size: $((Get-Item dist/PcManager.exe).Length / 1MB) MB"
-        } else {
-            Write-Error "PcManager.exe was not created!"
-            exit 1
-        }
+        & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
 
-    - name: Upload PcManager.exe Artifact
+    - name: Verify Executables Created
+      run: |
+        Get-ChildItem dist/
+
+    - name: Upload Installer Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: PcManager-Windows-Standalone
-        path: dist/PcManager.exe
+        name: PcManager-Windows-Installers
+        path: |
+          dist/PcManager.exe
+          dist/PcManager_Setup.exe
         retention-days: 30
 
     - name: Create GitHub Release (Permanent Download Link)
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: dist/PcManager.exe
+        files: |
+          dist/PcManager.exe
+          dist/PcManager_Setup.exe
         name: PcManager ${{ github.ref_name }}
         draft: false
         prerelease: false
