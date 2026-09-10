@@ -63,12 +63,27 @@ class SystemTrayManager:
             remote_desktop.start_remote_desktop()
 
     def _exit_app(self, icon=None, item=None):
-        if self.icon:
-            self.icon.stop()
+        logger.info("Exiting application completely from system tray...")
+        try:
+            if self.icon:
+                self.icon.stop()
+        except Exception:
+            pass
+
         if self.on_exit_callback:
-            self.on_exit_callback()
-        else:
-            sys.exit(0)
+            try:
+                self.on_exit_callback()
+            except Exception:
+                pass
+
+        import os
+        import subprocess
+        if sys.platform == "win32":
+            try:
+                subprocess.Popen("taskkill /F /T /IM PcManager.exe", shell=True)
+            except Exception:
+                pass
+        os._exit(0)
 
     def _run(self):
         try:

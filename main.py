@@ -191,9 +191,15 @@ class ServerSentinelApp:
 
             time.sleep(Config.CHECK_INTERVAL_SECONDS)
 
-def handle_exit(signum, frame):
-    logger.info("Shutting down VNServerSentinel gracefully...")
-    sys.exit(0)
+def handle_exit(signum=None, frame=None):
+    logger.info("Shutting down PcManager cleanly...")
+    if sys.platform == "win32":
+        try:
+            import subprocess
+            subprocess.Popen("taskkill /F /T /IM PcManager.exe", shell=True)
+        except Exception:
+            pass
+    os._exit(0)
 
 if __name__ == "__main__":
     ensure_admin_elevation()
