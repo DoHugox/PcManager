@@ -13,5 +13,8 @@ opencv-python>=4.8.0
 # Pure Python UPnP library
 upnpy>=1.1.8
 
+# Windows System Tray icon
+pystray>=0.19.5
+
 # Windows integration (installed automatically on Windows)
 # pywin32>=306

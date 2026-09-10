@@ -34,7 +34,9 @@ a = Analysis(
         'telegram_bot',
         'updater',
         'remote_desktop',
-        'web_dashboard'
+        'web_dashboard',
+        'tray_icon',
+        'pystray'
     ],
     hookspath=[],
     hooksconfig={},
@@ -64,6 +66,7 @@ exe = EXE(
     runtime_tmpdir=None,
     console=False, # Runs silently in the background (No black CMD window)
     icon='assets/app.ico',
+    uac_admin=True, # Auto-prompt Windows Administrator UAC privileges
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

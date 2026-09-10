@@ -167,30 +167,135 @@ class UPnPManager:
         return success, message
 
     def _fallback_open_port(self, external_port: int, internal_port: int, protocol: str, description: str) -> tuple[bool, str]:
-        """Try miniupnpc wrapper if available."""
-        try:
-            import miniupnpc
-            u = miniupnpc.UPnP()
-            u.discoverdelay = 200
-            u.discover()
-            u.selectigd()
-            u.addportmapping(int(external_port), protocol, self.local_ip, int(internal_port), description, '')
-            return True, f"Đã mở port {external_port} ➔ {self.local_ip}:{internal_port} qua miniupnpc."
-        except Exception as e:
-            return False, str(e)
+        """Pure Python fallback for UPnP AddPortMapping without any C dependencies."""
+        params = {
+            "NewRemoteHost": "",
+            "NewExternalPort": str(external_port),
+            "NewProtocol": protocol,
+            "NewInternalPort": str(internal_port),
+            "NewInternalClient": self.local_ip,
+            "NewEnabled": "1",
+            "NewPortMappingDescription": description,
+            "NewLeaseDuration": "0"
+        }
+        ok, msg = pure_python_soap_action("AddPortMapping", params)
+        if ok:
+            return True, f"Đã mở port {external_port} ➔ {self.local_ip}:{internal_port} ({protocol}) qua UPnP."
+        return False, msg
 
     def _fallback_close_port(self, external_port: int, protocol: str) -> tuple[bool, str]:
-        """Try miniupnpc wrapper to delete port."""
+        """Pure Python fallback for UPnP DeletePortMapping without any C dependencies."""
+        params = {
+            "NewRemoteHost": "",
+            "NewExternalPort": str(external_port),
+            "NewProtocol": protocol
+        }
+        ok, msg = pure_python_soap_action("DeletePortMapping", params)
+        if ok:
+            return True, f"Đã đóng port {external_port} qua UPnP."
+        return False, msg
+
+def pure_python_soap_action(action: str, params: dict) -> tuple[bool, str]:
+    """Pure-python SSDP + SOAP UPnP IGD implementation with zero external C dependencies."""
+    import socket
+    import re
+    import urllib.request
+    import urllib.parse
+
+    msg = (
+        'M-SEARCH * HTTP/1.1\r\n'
+        'HOST: 239.255.255.250:1900\r\n'
+        'MAN: "ssdp:discover"\r\n'
+        'MX: 2\r\n'
+        'ST: urn:schemas-upnp-org:service:WANIPConnection:1\r\n'
+        '\r\n'
+    )
+    locations = []
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(2.5)
+        sock.sendto(msg.encode(), ('239.255.255.250', 1900))
+        while True:
+            try:
+                data, _ = sock.recvfrom(2048)
+                resp = data.decode('utf-8', errors='ignore')
+                loc = re.search(r'LOCATION:\s*(http://[^\r\n]+)', resp, re.IGNORECASE)
+                if loc and loc.group(1) not in locations:
+                    locations.append(loc.group(1).strip())
+            except socket.timeout:
+                break
+        sock.close()
+    except Exception as e:
+        logger.debug(f"SSDP discovery error: {e}")
+
+    # Fallback to WANPPPConnection
+    if not locations:
+        msg_ppp = msg.replace('WANIPConnection:1', 'WANPPPConnection:1')
         try:
-            import miniupnpc
-            u = miniupnpc.UPnP()
-            u.discoverdelay = 200
-            u.discover()
-            u.selectigd()
-            u.deleteportmapping(int(external_port), protocol)
-            return True, f"Đã đóng port {external_port} qua miniupnpc."
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(2.0)
+            sock.sendto(msg_ppp.encode(), ('239.255.255.250', 1900))
+            while True:
+                try:
+                    data, _ = sock.recvfrom(2048)
+                    resp = data.decode('utf-8', errors='ignore')
+                    loc = re.search(r'LOCATION:\s*(http://[^\r\n]+)', resp, re.IGNORECASE)
+                    if loc and loc.group(1) not in locations:
+                        locations.append(loc.group(1).strip())
+                except socket.timeout:
+                    break
+            sock.close()
+        except Exception:
+            pass
+
+    if not locations:
+        return False, "Không tìm thấy Router hỗ trợ UPnP trong mạng Wi-Fi."
+
+    for location in locations:
+        try:
+            req = urllib.request.Request(location, headers={'User-Agent': 'VNServerSentinel'})
+            with urllib.request.urlopen(req, timeout=4) as response:
+                xml_content = response.read().decode('utf-8', errors='ignore')
+
+            service_match = re.search(r'<serviceType>urn:schemas-upnp-org:service:(WAN(?:IP|PPP)Connection:[12])</serviceType>[\s\S]*?<controlURL>([^<]+)</controlURL>', xml_content, re.IGNORECASE)
+            if not service_match:
+                continue
+
+            service_type = service_match.group(1)
+            control_path = service_match.group(2)
+            parsed_loc = urllib.parse.urlparse(location)
+            if control_path.startswith('/'):
+                control_url = f"{parsed_loc.scheme}://{parsed_loc.netloc}{control_path}"
+            else:
+                control_url = f"{parsed_loc.scheme}://{parsed_loc.netloc}/{control_path}"
+
+            param_xml = "".join([f"<{k}>{v}</{k}>" for k, v in params.items()])
+            soap_body = (
+                f'<?xml version="1.0"?>'
+                f'<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">'
+                f'<s:Body>'
+                f'<u:{action} xmlns:u="urn:schemas-upnp-org:service:{service_type}">'
+                f'{param_xml}'
+                f'</u:{action}>'
+                f'</s:Body>'
+                f'</s:Envelope>'
+            )
+
+            soap_headers = {
+                'Content-Type': 'text/xml; charset="utf-8"',
+                'SOAPAction': f'"urn:schemas-upnp-org:service:{service_type}#{action}"',
+                'User-Agent': 'VNServerSentinel'
+            }
+
+            post_req = urllib.request.Request(control_url, data=soap_body.encode('utf-8'), headers=soap_headers, method='POST')
+            with urllib.request.urlopen(post_req, timeout=5) as post_resp:
+                if post_resp.status in (200, 204):
+                    return True, "Thành công qua Pure Python UPnP."
         except Exception as e:
-            return False, str(e)
+            logger.debug(f"Pure Python SOAP attempt on {location} error: {e}")
+
+    return False, "Router từ chối lệnh UPnP hoặc chưa kích hoạt tính năng UPnP trên modem."
+
 
     def list_ports(self) -> List[Dict[str, Any]]:
         """List active port mappings from router if supported."""

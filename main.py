@@ -21,6 +21,33 @@ import system_monitor
 import telegram_bot
 import updater
 import web_dashboard
+import tray_icon
+
+def ensure_admin_elevation():
+    """Ensure process runs with Administrator privileges on Windows."""
+    if sys.platform == "win32" and "--no-elevate" not in sys.argv:
+        try:
+            import ctypes
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        except Exception:
+            is_admin = False
+
+        if not is_admin:
+            try:
+                import ctypes
+                params = " ".join([f'"{a}"' for a in sys.argv[1:]])
+                if getattr(sys, "frozen", False):
+                    exe = sys.executable
+                    cmd_args = params
+                else:
+                    exe = sys.executable
+                    cmd_args = f'"{sys.argv[0]}" {params}'
+
+                ret = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, cmd_args, None, 1)
+                if ret > 32:
+                    sys.exit(0)
+            except Exception as e:
+                pass
 
 # Configure logging
 logging.basicConfig(
@@ -40,6 +67,7 @@ class ServerSentinelApp:
         self.last_wan_ip = None
         self.upnp_mgr = network_upnp.UPnPManager()
         self.bot = telegram_bot.SentinelTelegramBot(self.upnp_mgr)
+        self.tray = None
 
     def start(self):
         logger.info("Starting VNServerSentinel Home Server Guardian...")
@@ -77,10 +105,14 @@ class ServerSentinelApp:
             except Exception:
                 pass
 
-        # 7. Enforce BIOS Power Loss setting (counter dead CMOS battery)
+        # 7. Start System Tray Icon
+        self.tray = tray_icon.SystemTrayManager(on_exit_callback=lambda: sys.exit(0))
+        self.tray.start()
+
+        # 8. Enforce BIOS Power Loss setting (counter dead CMOS battery)
         self._enforce_bios_power_loss()
 
-        # 8. Main Background Periodic Loop (IP tracking, Heartbeat ping)
+        # 9. Main Background Periodic Loop (IP tracking, Heartbeat ping)
         self._run_main_loop()
 
     def _enforce_bios_power_loss(self):
@@ -118,27 +150,26 @@ class ServerSentinelApp:
                 f"🟢 *MÁY CHỦ VIỆT NAM ĐÃ TRỰC TUYẾN!*\n\n"
                 f"🖥️ *Thiết bị:* `{net['hostname']} ({net['system']})`\n"
                 f"🌍 *Public IP:* `{net['wan_ip']}`\n"
-                f"🏠 *Local IP:* `{net['lan_ip']}`\n"
-                f"⏱️ *Khởi động:* `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n\n"
-                f"🛡️ _Hệ thống giám sát vật lý, mạng UPnP và Telegram Bot đang chạy._"
+                f"🏠 *Local IP:* `{net['lan_ip']}`\n\n"
+                f"👉 Gõ lệnh `/menu` để mở bảng điều khiển từ xa."
             )
 
         self.bot.notify_admin(msg, keyboard=self.bot.get_main_menu_keyboard())
 
     def _run_main_loop(self):
-        """Periodic background checks for IP changes and external heartbeats."""
-        logger.info("Entering background monitoring loop...")
+        """Main periodic monitoring loop."""
+        logger.info(f"Main loop running (Interval: {Config.CHECK_INTERVAL_SECONDS}s)...")
         while self.running:
             try:
-                # Update heartbeat state
-                system_monitor.update_heartbeat_state()
-
-                # Ping Cloud Dead-Man's switch if configured
+                # Ping cloud heartbeat
                 if Config.HEARTBEAT_URL:
                     try:
                         requests.get(Config.HEARTBEAT_URL, timeout=10)
                     except Exception as e:
                         logger.debug(f"Heartbeat URL ping error: {e}")
+
+                # Update heartbeat state
+                system_monitor.update_heartbeat_state()
 
                 # Check if Public IP has changed
                 current_wan_ip = network_upnp.get_public_ip()
@@ -165,6 +196,7 @@ def handle_exit(signum, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
+    ensure_admin_elevation()
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)
     app = ServerSentinelApp()
