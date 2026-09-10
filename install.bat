@@ -21,25 +21,39 @@ if %errorLevel% neq 0 (
     exit /b 1
 )
 
-:: 2. Kiểm tra Python
+cd /d "%~dp0"
+
+:: 2. Kiểm tra nếu đã có file PcManager.exe độc lập (Không cần Python)
+if exist "PcManager.exe" (
+    echo [+] Đã tìm thấy file thực thi độc lập: PcManager.exe!
+    echo [+] Máy tính KHÔNG CẦN cài đặt Python!
+    goto check_config
+)
+if exist "dist\PcManager.exe" (
+    echo [+] Di chuyển dist\PcManager.exe ra thư mục gốc...
+    move "dist\PcManager.exe" "PcManager.exe" >nul 2>&1
+    echo [+] Đã sẵn sàng chạy PcManager.exe không cần Python!
+    goto check_config
+)
+
+:: Nếu chưa có file EXE, kiểm tra Python để chạy dạng script
 python --version >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [X] Chưa tìm thấy Python trên máy!
-    echo     Vui lòng tải và cài đặt Python 3 (Nhớ tick chọn "Add python.exe to PATH"):
+    echo [X] Chưa tìm thấy PcManager.exe hoặc Python trên máy!
+    echo     Cách 1: Tải file PcManager.exe từ GitHub Releases và đặt vào đây.
+    echo     Cách 2: Cài đặt Python 3 (Nhớ tick "Add python.exe to PATH"):
     echo     https://www.python.org/downloads/
     echo.
     pause
     exit /b 1
 )
 
-echo [+] Đã tìm thấy Python. Đang cài đặt các thư viện phụ trợ...
-cd /d "%~dp0"
-
-:: Cài đặt thư viện
+echo [+] Đang cài đặt các thư viện phụ trợ qua Python...
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 python -m pip install pywin32
 
+:check_config
 :: 3. Kiểm tra file cấu hình .env
 if not exist ".env" (
     echo [*] Chưa có file .env. Đang tạo từ .env.example...
