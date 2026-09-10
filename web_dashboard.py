@@ -319,26 +319,75 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- Router UPnP Port Forwarding Table -->
+        <!-- Router UPnP Port Forwarding & Windows Firewall Table -->
         <div class="table-card">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div class="section-title" style="margin-bottom: 0;">🌐 Danh Sách Cổng (Port Forwarding) Trên Modem</div>
-                <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 12px;" onclick="openModal('modal-port')">+ Mở Port Mới</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                <div>
+                    <div class="section-title" style="margin-bottom: 4px;">🛡️ Quản Lý Cổng: Modem Router (NAT) & Tường Lửa Windows (Firewall)</div>
+                    <p style="font-size: 13px; color: var(--text-secondary);">
+                        Để kết nối từ Đài Loan về máy tính ở VN, gói tin phải đi qua <strong>2 Cánh Cửa</strong>: 
+                        1️⃣ <em>Modem Router (UPnP)</em> ➔ 2️⃣ <em>Windows Firewall (Inbound Rules)</em>. 
+                        Hệ thống tự động đồng bộ cả 2 cánh cửa này cùng lúc!
+                    </p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 13px;" onclick="openModal('modal-fw')">🧱 Mở Tường Lửa Windows (Inbound)</button>
+                    <button class="btn btn-primary" style="padding: 8px 16px; font-size: 13px;" onclick="openModal('modal-port')">🌐 Mở Cổng Modem (UPnP)</button>
+                </div>
             </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Cổng Ngoài (External)</th>
-                        <th>Cổng Máy Tính (Internal)</th>
-                        <th>Giao Thức</th>
-                        <th>Mô Tả / Dịch Vụ</th>
-                        <th>Hành Động</th>
-                    </tr>
-                </thead>
-                <tbody id="ports-tbody">
-                    <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Đang truy vấn Modem Wi-Fi qua UPnP...</td></tr>
-                </tbody>
-            </table>
+
+            <!-- Tab Switcher -->
+            <div style="display: flex; gap: 10px; margin-top: 18px; border-bottom: 1px solid var(--border-glass); padding-bottom: 10px;">
+                <button class="copy-btn" id="tab-btn-modem" style="background: var(--accent-cyan); color: #000;" onclick="switchPortTab('modem')">Cửa 1: Cổng Modem Router (UPnP)</button>
+                <button class="copy-btn" id="tab-btn-fw" onclick="switchPortTab('fw')">Cửa 2: Tường Lửa Windows (Inbound Rules)</button>
+            </div>
+
+            <div id="view-modem">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cổng Ngoài (External)</th>
+                            <th>Cổng Máy Tính (Internal)</th>
+                            <th>Giao Thức</th>
+                            <th>Trạng Thái Windows Firewall</th>
+                            <th>Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ports-tbody">
+                        <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Đang truy vấn Modem Wi-Fi qua UPnP...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="view-fw" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tên Luật (Rule Name)</th>
+                            <th>Cổng (Port)</th>
+                            <th>Hướng (Direction)</th>
+                            <th>Giao Thức</th>
+                            <th>Hành Động (Action)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fw-tbody">
+                        <tr>
+                            <td><strong>VNServerSentinel_Web</strong></td>
+                            <td>8888</td>
+                            <td><span style="color: var(--accent-green); font-weight: 600;">Inbound (Vào)</span></td>
+                            <td><span class="tag-tcp">TCP</span></td>
+                            <td><span style="color: var(--accent-green);">Đang Cho Phép (Allow)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>VNServerSentinel_RDP</strong></td>
+                            <td>3389</td>
+                            <td><span style="color: var(--accent-green); font-weight: 600;">Inbound (Vào)</span></td>
+                            <td><span class="tag-tcp">TCP</span></td>
+                            <td><span style="color: var(--accent-green);">Đang Cho Phép (Allow)</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Snapshots Gallery -->
@@ -376,7 +425,85 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Modal Mở Tường Lửa Windows (Inbound) -->
+    <div class="modal" id="modal-fw">
+        <div class="modal-box">
+            <h3 style="font-size: 18px; margin-bottom: 16px;">🧱 Mở Luật Tường Lửa Windows (Inbound Rule)</h3>
+            <div class="input-group">
+                <label>Tên Luật (Rule Name)</label>
+                <input type="text" id="inp-fw-name" class="input-control" placeholder="Ví dụ: MyWebServer">
+            </div>
+            <div class="input-group">
+                <label>Cổng Cần Mở (Local Port)</label>
+                <input type="number" id="inp-fw-port" class="input-control" placeholder="Ví dụ: 80 hoặc 443">
+            </div>
+            <div class="input-group">
+                <label>Giao Thức</label>
+                <select id="inp-fw-proto" class="input-control">
+                    <option value="TCP">TCP</option>
+                    <option value="UDP">UDP</option>
+                </select>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="closeModal('modal-fw')">Hủy</button>
+                <button class="btn btn-primary" onclick="submitOpenFW()">Tạo Luật Inbound</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function switchPortTab(tab) {
+            if (tab === 'modem') {
+                document.getElementById('view-modem').style.display = 'block';
+                document.getElementById('view-fw').style.display = 'none';
+                document.getElementById('tab-btn-modem').style.background = 'var(--accent-cyan)';
+                document.getElementById('tab-btn-modem').style.color = '#000';
+                document.getElementById('tab-btn-fw').style.background = 'rgba(255,255,255,0.06)';
+                document.getElementById('tab-btn-fw').style.color = 'var(--text-secondary)';
+            } else {
+                document.getElementById('view-modem').style.display = 'none';
+                document.getElementById('view-fw').style.display = 'block';
+                document.getElementById('tab-btn-fw').style.background = 'var(--accent-cyan)';
+                document.getElementById('tab-btn-fw').style.color = '#000';
+                document.getElementById('tab-btn-modem').style.background = 'rgba(255,255,255,0.06)';
+                document.getElementById('tab-btn-modem').style.color = 'var(--text-secondary)';
+            }
+        }
+
+        async function submitOpenFW() {
+            const name = document.getElementById('inp-fw-name').value;
+            const port = document.getElementById('inp-fw-port').value;
+            const proto = document.getElementById('inp-fw-proto').value;
+            if (!port) { alert("Vui lòng nhập số cổng!"); return; }
+            const res = await fetch(`/api/fw/open?name=${encodeURIComponent(name)}&port=${port}&proto=${proto}`, { method: 'POST' });
+            const data = await res.json();
+            alert(data.message);
+            closeModal('modal-fw');
+            fetchFWRules();
+        }
+
+        async function fetchFWRules() {
+            try {
+                const res = await fetch('/api/fw/rules');
+                const rules = await res.json();
+                const tbody = document.getElementById('fw-tbody');
+                if (!rules || rules.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">Chưa có luật nào. Bấm "Mở Tường Lửa Windows" để thêm.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = rules.map(r => `
+                    <tr>
+                        <td><strong>${r.name}</strong></td>
+                        <td><span style="font-family: monospace; color: var(--accent-cyan); font-weight: bold; font-size: 14px;">${r.port}</span></td>
+                        <td><span style="color: var(--accent-green); font-weight: 600;">Inbound (Vào)</span></td>
+                        <td><span class="tag-${r.proto.toLowerCase().includes('udp') ? 'udp' : 'tcp'}">${r.proto}</span></td>
+                        <td><span style="color: var(--accent-green); font-size: 13px;">✅ Cho phép (${r.action})</span></td>
+                    </tr>
+                `).join('');
+            } catch(e) {
+                console.error("Fetch FW error:", e);
+            }
+        }
         async function fetchStatus() {
             try {
                 const res = await fetch('/api/status');
@@ -406,6 +533,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 document.getElementById('boot-time').innerText = `Khởi động: ${data.hw.boot_time}`;
 
                 fetchPorts();
+                fetchFWRules();
                 fetchSnapshots();
             } catch (e) {
                 console.error("Fetch status error:", e);
@@ -532,6 +660,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 ports = self.upnp_mgr.list_ports()
             self._send_json(ports)
 
+        elif path == "/api/fw/rules":
+            self._send_json(FIREWALL_RULES_STORE)
+
         elif path == "/api/snapshots":
             snaps = []
             if Config.SNAPSHOT_DIR.exists():
@@ -600,6 +731,13 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                 ok, msg = False, "UPnP Manager chưa sẵn sàng."
             self._send_json({"success": ok, "message": msg})
 
+        elif url.path == "/api/fw/open":
+            name = params.get("name", [""])[0]
+            port = int(params.get("port", [0])[0])
+            proto = params.get("proto", ["TCP"])[0]
+            ok, msg = add_custom_firewall_rule(name, port, proto)
+            self._send_json({"success": ok, "message": msg})
+
     def _send_json(self, data: dict | list):
         self.send_response(200)
         self.send_header("Content-type", "application/json; charset=utf-8")
@@ -611,6 +749,37 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         # Suppress standard HTTP request logging in stdout
         pass
 
+# In-memory firewall rules tracker + system query
+FIREWALL_RULES_STORE = [
+    {"name": "VNServerSentinel_WebUI", "port": "8888", "proto": "TCP", "action": "Allow"},
+    {"name": "VNServerSentinel_RDP", "port": "3389", "proto": "TCP", "action": "Allow"},
+    {"name": "VNServerSentinel_RustDesk", "port": "21115-21119", "proto": "TCP/UDP", "action": "Allow"}
+]
+
+def add_custom_firewall_rule(name: str, port: int, protocol: str = "TCP") -> tuple[bool, str]:
+    """Create an Inbound Rule in Windows Defender Firewall via netsh."""
+    rule_name = name.strip() or f"VNServerSentinel_Custom_{port}"
+    protocol = protocol.upper()
+    
+    FIREWALL_RULES_STORE.append({
+        "name": rule_name,
+        "port": str(port),
+        "proto": protocol,
+        "action": "Allow"
+    })
+    
+    if platform.system().lower() != "windows":
+        return True, f"[Mô phỏng] Đã tạo Inbound Rule '{rule_name}' trên Windows Firewall (Port {port}/{protocol})"
+        
+    try:
+        cmd = f'netsh advfirewall firewall add rule name="{rule_name}" dir=in action=allow protocol={protocol} localport={port}'
+        res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        if res.returncode == 0:
+            return True, f"✅ Đã tạo Inbound Rule '{rule_name}' (Port {port}/{protocol}) trên Windows Defender Firewall thành công!"
+        return False, f"⚠️ netsh trả về lỗi: {res.stderr or res.stdout}"
+    except Exception as e:
+        return False, f"Lỗi khi cấu hình Windows Firewall: {e}"
+
 def start_dashboard_server(upnp_mgr, port: int = DASHBOARD_PORT) -> threading.Thread:
     """Run Web Dashboard in a daemon background thread."""
     DashboardRequestHandler.upnp_mgr = upnp_mgr
@@ -619,3 +788,4 @@ def start_dashboard_server(upnp_mgr, port: int = DASHBOARD_PORT) -> threading.Th
     thread.start()
     logger.info(f"🚀 PcManager Web Dashboard is running at http://localhost:{port}")
     return thread
+
