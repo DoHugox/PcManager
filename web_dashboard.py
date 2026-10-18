@@ -19,6 +19,7 @@ import urllib.parse
 import subprocess
 from pathlib import Path
 from datetime import datetime
+from typing import Optional, Dict, Any, List
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from config import Config
