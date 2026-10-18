@@ -196,6 +196,27 @@ class ServerSentinelApp:
 
             time.sleep(Config.CHECK_INTERVAL_SECONDS)
 
+def check_single_instance() -> tuple[bool, any]:
+    """
+    Ensure only one instance of PcManager runs at a time using a Windows Named Mutex.
+    If another instance is already running, returns (False, mutex).
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            ERROR_ALREADY_EXISTS = 183
+            mutex_name = "Global\\PcManager_Sentinel_SingleInstance_Mutex"
+            mutex = kernel32.CreateMutexW(None, False, mutex_name)
+            last_err = kernel32.GetLastError()
+            if last_err == ERROR_ALREADY_EXISTS:
+                return False, mutex
+            return True, mutex
+        except Exception as e:
+            logger.debug(f"Mutex check note: {e}")
+            return True, None
+    return True, None
+
 def handle_exit(signum=None, frame=None):
     logger.info("Shutting down PcManager cleanly...")
     if sys.platform == "win32":
@@ -208,6 +229,29 @@ def handle_exit(signum=None, frame=None):
 
 if __name__ == "__main__":
     ensure_admin_elevation()
+
+    # Single-Instance Protection: prevent duplicate background tasks, port conflicts & duplicate Telegram bot polling
+    is_first_instance, _app_mutex = check_single_instance()
+    if not is_first_instance:
+        logger.info("PcManager is already running in background. Bringing up active window or web dashboard...")
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                hwnd = user32.FindWindowW(None, "PcManager - Quản Trị Máy Chủ Từ Xa (Native Client)")
+                if not hwnd:
+                    hwnd = user32.FindWindowW(None, "PcManager - Quản Trị Máy Chủ Từ Xa (Classic UI)")
+                if hwnd:
+                    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                    user32.SetForegroundWindow(hwnd)
+                    sys.exit(0)
+            except Exception:
+                pass
+        # Fallback: Open web dashboard in default browser and exit second instance cleanly
+        import webbrowser
+        webbrowser.open(f"http://localhost:{web_dashboard.DASHBOARD_PORT}")
+        sys.exit(0)
+
     signal.signal(signal.SIGINT, handle_exit)
     signal.signal(signal.SIGTERM, handle_exit)
     app = ServerSentinelApp()

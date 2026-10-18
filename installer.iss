@@ -2,7 +2,7 @@
 ; Creates a standard Windows Installer Wizard (PcManager_Setup.exe) with Icon and Shortcuts
 
 #define MyAppName "PcManager"
-#define MyAppVersion "1.0.9"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "DoHugox"
 #define MyAppURL "https://github.com/DoHugox/PcManager"
 #define MyAppExeName "PcManager.exe"
@@ -51,9 +51,12 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilen
 Name: "{autodesktop}\PcManager Dashboard"; Filename: "http://localhost:8888"; IconFilename: "{app}\assets\app.ico"; Tasks: desktopicon
 
 [Run]
-; Cấu hình tự khởi động vào Task Scheduler nếu người dùng chọn
-Filename: "schtasks.exe"; Parameters: "/create /tn ""{#MyAppName}"" /tr """"{app}\{#MyAppExeName}"""" /sc onstart /ru ""SYSTEM"" /rl HIGHEST /f"; Flags: runhidden; Tasks: autostart
+; Cho phép Windows Firewall mở cổng 8888 cho Web Dashboard
+Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""PcManager Web Dashboard"" dir=in action=allow protocol=TCP localport=8888"; Flags: runhidden
+; Cấu hình tự khởi động vào Task Scheduler nếu người dùng chọn (chế độ bảo vệ nền --service)
+Filename: "schtasks.exe"; Parameters: "/create /tn ""{#MyAppName}"" /tr """"{app}\{#MyAppExeName}"" --service"" /sc onstart /ru ""SYSTEM"" /rl HIGHEST /f"; Flags: runhidden; Tasks: autostart
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#MyAppName}"" /f"; Flags: runhidden
+Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PcManager Web Dashboard"""; Flags: runhidden

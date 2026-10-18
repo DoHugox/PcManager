@@ -4,16 +4,24 @@
 
 block_cipher = None
 
+extra_datas = [
+    ('bios_helper.ps1', '.'),
+    ('VERSION', '.'),
+    ('HUONG_DAN_CAI_DAT.md', '.'),
+    ('.env.example', '.'),
+]
+
+try:
+    from PyInstaller.utils.hooks import collect_data_files
+    extra_datas += collect_data_files('customtkinter')
+except Exception:
+    pass
+
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('bios_helper.ps1', '.'),
-        ('VERSION', '.'),
-        ('HUONG_DAN_CAI_DAT.md', '.'),
-        ('.env.example', '.'),
-    ],
+    datas=extra_datas,
     hiddenimports=[
         'upnpy',
         'psutil',
@@ -39,12 +47,16 @@ a = Analysis(
         'pystray',
         'desktop_ui',
         'webview',
-        'mss'
+        'mss',
+        'customtkinter',
+        'tkinter',
+        'tkinter.ttk',
+        'darkdetect'
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter', 'unittest', 'pydoc'],
+    excludes=['unittest', 'pydoc'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

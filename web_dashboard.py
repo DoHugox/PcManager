@@ -1919,11 +1919,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         # Suppress standard HTTP request logging in stdout
         pass
 
-def start_dashboard_server(upnp_mgr, port: int = DASHBOARD_PORT) -> threading.Thread:
+def start_dashboard_server(upnp_mgr, port: int = DASHBOARD_PORT) -> Optional[threading.Thread]:
     """Run Web Dashboard in a daemon background thread."""
     DashboardRequestHandler.upnp_mgr = upnp_mgr
-    server = HTTPServer(("0.0.0.0", port), DashboardRequestHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    logger.info(f"🚀 PcManager Web Dashboard is running at http://localhost:{port}")
-    return thread
+    try:
+        server = HTTPServer(("0.0.0.0", port), DashboardRequestHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        logger.info(f"🚀 PcManager Web Dashboard is running at http://localhost:{port}")
+        return thread
+    except OSError as e:
+        logger.warning(f"Port {port} is already in use or cannot bind ({e}). Web dashboard might already be running.")
+        return None
