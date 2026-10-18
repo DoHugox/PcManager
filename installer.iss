@@ -2,7 +2,7 @@
 ; Creates a standard Windows Installer Wizard (PcManager_Setup.exe) with Icon and Shortcuts
 
 #define MyAppName "PcManager"
-#define MyAppVersion "1.1.3"
+#define MyAppVersion "1.1.4"
 #define MyAppPublisher "DoHugox"
 #define MyAppURL "https://github.com/DoHugox/PcManager"
 #define MyAppExeName "PcManager.exe"
@@ -55,7 +55,7 @@ Name: "{autodesktop}\PcManager Dashboard"; Filename: "http://localhost:8888"; Ic
 Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""PcManager Web Dashboard"" dir=in action=allow protocol=TCP localport=8888"; Flags: runhidden
 ; Cấu hình tự khởi động vào Task Scheduler nếu người dùng chọn (chế độ bảo vệ nền --service)
 Filename: "schtasks.exe"; Parameters: "/create /tn ""{#MyAppName}"" /tr """"{app}\{#MyAppExeName}"" --service"" /sc onstart /ru ""SYSTEM"" /rl HIGHEST /f"; Flags: runhidden; Tasks: autostart
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#MyAppName}"" /f"; Flags: runhidden
