@@ -85,6 +85,17 @@ class ServerSentinelApp:
         if upgraded_ver:
             self.bot.notify_admin(f"🎉 *AUTO-UPDATE THÀNH CÔNG!*\nMáy chủ đã được cập nhật an toàn lên phiên bản `v{upgraded_ver}`.")
 
+        # Clean up any leftover .bak files from previous updates
+        try:
+            base_dir = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Config.BASE_DIR
+            for old_bak in base_dir.glob("*.bak*"):
+                try:
+                    old_bak.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # 3. Check power outage / reboot history
         reboot_report = system_monitor.check_power_cut_history()
         self._send_startup_notification(reboot_report)

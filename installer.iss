@@ -2,7 +2,7 @@
 ; Creates a standard Windows Installer Wizard (PcManager_Setup.exe) with Icon and Shortcuts
 
 #define MyAppName "PcManager"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "DoHugox"
 #define MyAppURL "https://github.com/DoHugox/PcManager"
 #define MyAppExeName "PcManager.exe"

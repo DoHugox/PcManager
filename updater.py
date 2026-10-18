@@ -118,16 +118,31 @@ def apply_update_exe(new_exe_path: Path, new_version: str) -> tuple[bool, str]:
     """Apply standalone executable update by swapping binary."""
     try:
         current_exe = Path(sys.executable).resolve()
-        bak_exe = current_exe.with_suffix(".exe.bak")
-        if bak_exe.exists():
-            try:
-                bak_exe.unlink()
-            except Exception:
-                pass
 
-        # Windows allows renaming a currently running executable!
-        current_exe.rename(bak_exe)
+        # 1. Rename running executable to a guaranteed unique backup name to prevent WinError 183
+        if current_exe.exists():
+            unique_bak = current_exe.with_name(f"PcManager_old_{int(time.time())}_{os.getpid()}.bak")
+            try:
+                current_exe.rename(unique_bak)
+            except Exception:
+                try:
+                    os.replace(current_exe, unique_bak)
+                except Exception as e:
+                    logger.error(f"Cannot rename running exe: {e}")
+                    raise e
+
+        # 2. Copy the newly downloaded executable into current_exe location
         shutil.copy2(new_exe_path, current_exe)
+
+        # 3. Clean up any unlocked old .bak files left from previous updates
+        try:
+            for old_bak in current_exe.parent.glob("*.bak*"):
+                try:
+                    old_bak.unlink()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
         VERSION_FILE.write_text(new_version, encoding="utf-8")
         UPDATE_FLAG.write_text(json.dumps({
