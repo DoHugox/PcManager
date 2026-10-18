@@ -9,6 +9,7 @@ import sys
 import time
 import json
 import logging
+import platform
 import subprocess
 import threading
 from datetime import datetime
