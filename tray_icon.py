@@ -43,7 +43,15 @@ class SystemTrayManager:
         img = Image.new("RGBA", (64, 64), color=(0, 242, 254, 255))
         return img
 
-    def _open_dashboard(self, icon=None, item=None):
+    def _open_desktop_ui(self, icon=None, item=None):
+        try:
+            import desktop_ui
+            desktop_ui.DesktopUIManager.get_instance().show_window()
+        except Exception as e:
+            logger.warning(f"Failed to open desktop UI: {e}. Opening in browser.")
+            webbrowser.open("http://localhost:8888")
+
+    def _open_browser(self, icon=None, item=None):
         webbrowser.open("http://localhost:8888")
 
     def _action_screen(self, icon=None, item=None):
@@ -92,7 +100,8 @@ class SystemTrayManager:
 
             image = self._get_icon_image()
             menu = pystray.Menu(
-                item("🌐 Mở Web Dashboard (http://localhost:8888)", self._open_dashboard, default=True),
+                item("🖥️ Mở Ứng Dụng PcManager", self._open_desktop_ui, default=True),
+                item("🌐 Mở Trên Trình Duyệt Web", self._open_browser),
                 pystray.Menu.SEPARATOR,
                 item("📸 Chụp Màn Hình Ngay", self._action_screen),
                 item("📷 Chụp Webcam Kẻ Ngồi Máy", self._action_cam),

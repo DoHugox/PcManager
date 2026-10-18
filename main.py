@@ -22,6 +22,7 @@ import telegram_bot
 import updater
 import web_dashboard
 import tray_icon
+import desktop_ui
 
 def ensure_admin_elevation():
     """Ensure process runs with Administrator privileges on Windows."""
@@ -96,14 +97,8 @@ class ServerSentinelApp:
         bot_thread = threading.Thread(target=self.bot.run_polling, daemon=True)
         bot_thread.start()
 
-        # 6. Start Built-in Glassmorphic Web Dashboard
+        # 6. Start Built-in Glassmorphic Dashboard Server
         web_dashboard.start_dashboard_server(self.upnp_mgr, port=web_dashboard.DASHBOARD_PORT)
-        if "--service" not in sys.argv and "--silent" not in sys.argv:
-            try:
-                import webbrowser
-                threading.Timer(1.5, lambda: webbrowser.open(f"http://localhost:{web_dashboard.DASHBOARD_PORT}")).start()
-            except Exception:
-                pass
 
         # 7. Start System Tray Icon
         self.tray = tray_icon.SystemTrayManager(on_exit_callback=lambda: sys.exit(0))
@@ -112,8 +107,18 @@ class ServerSentinelApp:
         # 8. Enforce BIOS Power Loss setting (counter dead CMOS battery)
         self._enforce_bios_power_loss()
 
-        # 9. Main Background Periodic Loop (IP tracking, Heartbeat ping)
-        self._run_main_loop()
+        # 9. Main Background Periodic Loop (IP tracking, Heartbeat ping) in background thread
+        main_loop_thread = threading.Thread(target=self._run_main_loop, daemon=True)
+        main_loop_thread.start()
+
+        # 10. Launch Native Desktop Window (PyWebView & Edge WebView2)
+        desktop_mgr = desktop_ui.DesktopUIManager.get_instance()
+        ui_launched = desktop_mgr.launch(port=web_dashboard.DASHBOARD_PORT, on_exit=lambda: sys.exit(0))
+
+        if not ui_launched:
+            logger.info("Running in background / headless mode. Main loop active.")
+            while self.running:
+                time.sleep(1)
 
     def _enforce_bios_power_loss(self):
         """Reinforce BIOS Restore on AC Power Loss setting periodically to counter dead CMOS battery."""

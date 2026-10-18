@@ -165,3 +165,169 @@ def check_windows_shutdown_event() -> str:
     except Exception:
         pass
     return "Khởi động lại (Có thể do cúp điện hoặc khởi động lại hệ thống)"
+
+def get_active_listening_services() -> list[dict]:
+    """Scan all active TCP/UDP listening ports and identify the services and processes using them."""
+    services = []
+    seen = set()
+    try:
+        for c in psutil.net_connections(kind="inet"):
+            if c.status == psutil.CONN_LISTEN and c.laddr:
+                proto = "TCP" if c.type == 1 else "UDP"
+                port = c.laddr.port
+                ip = c.laddr.ip
+                key = (proto, port)
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                pid = c.pid
+                pname = "Hệ thống / Windows Service"
+                cmdline = ""
+                mem_mb = 0.0
+                if pid:
+                    try:
+                        p = psutil.Process(pid)
+                        pname = p.name()
+                        cmdline = " ".join(p.cmdline() or [])
+                        mem_mb = round(p.memory_info().rss / (1024 * 1024), 1)
+                    except Exception:
+                        pass
+
+                # Smart recognition for common servers (Minecraft, 9Router, Web, DB, etc.)
+                desc = "Ứng dụng mạng"
+                lower_cmd = cmdline.lower()
+                lower_name = pname.lower()
+                if "minecraft" in lower_cmd or "spigot" in lower_cmd or "paper" in lower_cmd or port == 25565:
+                    desc = "🎮 Minecraft Server"
+                elif "9router" in lower_cmd or "9router" in lower_name:
+                    desc = "🌐 9Router Service"
+                elif port == 3389:
+                    desc = "🖥️ Windows RDP (Remote Desktop)"
+                elif port == 8888:
+                    desc = "🛡️ PcManager Web Dashboard"
+                elif "rustdesk" in lower_name:
+                    desc = "⚡ RustDesk Remote Desktop"
+                elif "python" in lower_name and "main.py" in lower_cmd:
+                    desc = "🛡️ PcManager Core"
+                elif "mysql" in lower_name or port == 3306:
+                    desc = "🗄️ MySQL Database"
+                elif "postgres" in lower_name or port == 5432:
+                    desc = "🗄️ PostgreSQL Database"
+                elif "redis" in lower_name or port == 6379:
+                    desc = "⚡ Redis In-Memory Cache"
+                elif "node" in lower_name:
+                    desc = "🟢 Node.js Web App"
+                elif "nginx" in lower_name or "httpd" in lower_name:
+                    desc = "🌍 Nginx/Apache Web Server"
+                elif "qbittorrent" in lower_name or (port == 8080 and "qbit" in lower_cmd):
+                    desc = "📥 qBittorrent Web UI"
+                elif port == 80 or port == 443:
+                    desc = "🌐 HTTP/HTTPS Web Server"
+
+                services.append({
+                    "protocol": proto,
+                    "port": port,
+                    "ip": ip,
+                    "pid": pid,
+                    "process": pname,
+                    "desc": desc,
+                    "mem_mb": mem_mb,
+                    "cmdline": cmdline[:150]
+                })
+    except Exception as e:
+        logger.error(f"Error scanning active listening services: {e}")
+
+    services.sort(key=lambda x: x["port"])
+    return services
+
+def get_top_processes(limit: int = 5) -> list[dict]:
+    """Retrieve top memory and CPU consuming processes."""
+    procs = []
+    for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_percent", "memory_info"]):
+        try:
+            mem_mb = round(p.info["memory_info"].rss / (1024 * 1024), 1)
+            procs.append({
+                "pid": p.info["pid"],
+                "name": p.info["name"],
+                "cpu": p.info["cpu_percent"] or 0.0,
+                "mem_mb": mem_mb,
+                "mem_percent": round(p.info["memory_percent"] or 0.0, 1)
+            })
+        except Exception:
+            pass
+    procs.sort(key=lambda x: x["mem_mb"], reverse=True)
+    return procs[:limit]
+
+def clean_ram() -> tuple[bool, str]:
+    """Release unneeded working sets and purged standby memory across processes."""
+    if platform.system().lower() != "windows":
+        try:
+            mem = psutil.virtual_memory()
+            return True, f"🧹 Đã kiểm tra tài nguyên bộ nhớ: RAM đang dùng {mem.percent}% ({round(mem.used/(1024**3), 2)}GB / {round(mem.total/(1024**3), 2)}GB)."
+        except Exception as e:
+            return False, f"Lỗi: {e}"
+
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        psapi = ctypes.windll.psapi
+
+        before_mem = psutil.virtual_memory()
+        PROCESS_SET_QUOTA = 0x0100
+        PROCESS_QUERY_INFORMATION = 0x0400
+
+        freed_count = 0
+        for p in psutil.process_iter(["pid", "name"]):
+            try:
+                pid = p.info["pid"]
+                if pid <= 4:
+                    continue
+                handle = kernel32.OpenProcess(PROCESS_SET_QUOTA | PROCESS_QUERY_INFORMATION, False, pid)
+                if handle:
+                    psapi.EmptyWorkingSet(handle)
+                    kernel32.CloseHandle(handle)
+                    freed_count += 1
+            except Exception:
+                pass
+
+        after_mem = psutil.virtual_memory()
+        freed_mb = round((before_mem.used - after_mem.used) / (1024 * 1024), 1)
+        if freed_mb < 0:
+            freed_mb = 0.0
+
+        return True, (
+            f"🧹 *ĐÃ DỌN DẸP & THU HỒI RAM THÀNH CÔNG!*\n\n"
+            f"⚡ Đã tối ưu hóa: `{freed_count}` tiến trình Windows\n"
+            f"💾 Giải phóng ước tính: `~{freed_mb} MB RAM`\n"
+            f"🧠 RAM hiện tại: `{after_mem.percent}%` ({round(after_mem.used/(1024**3), 2)}GB / {round(after_mem.total/(1024**3), 2)}GB)"
+        )
+    except Exception as e:
+        logger.error(f"Error executing RAM clean: {e}")
+        return False, f"Lỗi dọn RAM: {e}"
+
+def kill_process(identifier: Any) -> tuple[bool, str]:
+    """Terminate process by PID or executable name."""
+    try:
+        if str(identifier).isdigit():
+            pid = int(identifier)
+            p = psutil.Process(pid)
+            name = p.name()
+            p.terminate()
+            return True, f"🛑 Đã gửi lệnh buộc dừng tiến trình `{name}` (PID: `{pid}`)."
+        else:
+            name_target = str(identifier).lower()
+            killed = 0
+            for p in psutil.process_iter(["pid", "name"]):
+                try:
+                    if p.info["name"] and p.info["name"].lower() == name_target:
+                        p.terminate()
+                        killed += 1
+                except Exception:
+                    pass
+            if killed > 0:
+                return True, f"🛑 Đã buộc dừng `{killed}` tiến trình có tên `{identifier}`."
+            return False, f"⚠️ Không tìm thấy tiến trình nào có tên `{identifier}` đang chạy."
+    except Exception as e:
+        logger.error(f"Error terminating process {identifier}: {e}")
+        return False, f"Lỗi khi tắt tiến trình: {e}"

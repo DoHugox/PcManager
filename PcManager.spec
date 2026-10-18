@@ -36,7 +36,10 @@ a = Analysis(
         'remote_desktop',
         'web_dashboard',
         'tray_icon',
-        'pystray'
+        'pystray',
+        'desktop_ui',
+        'webview',
+        'mss'
     ],
     hookspath=[],
     hooksconfig={},

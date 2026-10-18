@@ -56,26 +56,30 @@ class TelegramClient:
             logger.error(f"Error sending Telegram message: {e}")
             return None
 
-    def send_photo(self, chat_id: str, photo_path: Path, caption: str = "") -> Optional[Dict]:
+    def send_photo(self, chat_id: str, photo_path: Path, caption: str = "", reply_markup: Optional[Dict] = None) -> Optional[Dict]:
         """Upload and send an image file."""
         url = f"{self.base_url}/sendPhoto"
         try:
             with open(photo_path, "rb") as f:
                 files = {"photo": f}
                 data = {"chat_id": chat_id, "caption": caption[:1024]}
+                if reply_markup:
+                    data["reply_markup"] = json.dumps(reply_markup)
                 r = self.session.post(url, data=data, files=files, timeout=30)
                 return r.json()
         except Exception as e:
             logger.error(f"Error sending photo: {e}")
             return None
 
-    def send_document(self, chat_id: str, doc_path: Path, caption: str = "") -> Optional[Dict]:
+    def send_document(self, chat_id: str, doc_path: Path, caption: str = "", reply_markup: Optional[Dict] = None) -> Optional[Dict]:
         """Upload and send a document/file."""
         url = f"{self.base_url}/sendDocument"
         try:
             with open(doc_path, "rb") as f:
                 files = {"document": f}
                 data = {"chat_id": chat_id, "caption": caption[:1024]}
+                if reply_markup:
+                    data["reply_markup"] = json.dumps(reply_markup)
                 r = self.session.post(url, data=data, files=files, timeout=60)
                 return r.json()
         except Exception as e:
@@ -139,18 +143,23 @@ class SentinelTelegramBot:
                     {"text": "🌐 Địa Chỉ IP", "callback_data": "cmd_ip"}
                 ],
                 [
+                    {"text": "🔌 Dịch Vụ & Port Đang Chạy", "callback_data": "cmd_services"},
+                    {"text": "⚡ Top Tiến Trình (RAM/CPU)", "callback_data": "cmd_ps"}
+                ],
+                [
                     {"text": "📸 Chụp Màn Hình", "callback_data": "cmd_screen"},
                     {"text": "📷 Chụp Webcam", "callback_data": "cmd_cam"}
                 ],
                 [
-                    {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
-                    {"text": "🚪 Quản Lý Port", "callback_data": "cmd_ports"}
+                    {"text": "🧹 Dọn Dẹp RAM", "callback_data": "cmd_cleanram"},
+                    {"text": "🚪 Mở/Đóng Port Router", "callback_data": "cmd_ports"}
                 ],
                 [
                     {"text": "📁 Quản Lý Tệp", "callback_data": "cmd_files"},
                     {"text": "🖥️ Remote Desktop", "callback_data": "cmd_rd"}
                 ],
                 [
+                    {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
                     {"text": "🔄 Check Update", "callback_data": "cmd_update"}
                 ]
             ]
@@ -238,6 +247,12 @@ class SentinelTelegramBot:
             )
             self.client.send_message(chat_id, welcome, reply_markup=self.get_main_menu_keyboard())
 
+        elif command in ("/ping", "/test"):
+            t0 = time.time()
+            self.client.send_message(chat_id, "🏓 Đang kiểm tra kết nối tới máy chủ...")
+            elapsed = round((time.time() - t0) * 1000)
+            self.client.send_message(chat_id, f"⚡ *Pong!* Phản hồi mạng: `{elapsed}ms`\n🟢 Máy chủ và Bot đang trực tuyến ổn định!")
+
         elif command == "/status":
             self._cmd_status(chat_id)
 
@@ -299,16 +314,40 @@ class SentinelTelegramBot:
             ok, msg_text = file_manager.delete_path(target_path)
             self.client.send_message(chat_id, msg_text)
 
-        elif command == "/exec":
-            # Requires PIN: /exec <pin> <powershell command>
-            if len(args) < 2:
-                self.client.send_message(chat_id, "⚠️ Cú pháp chạy lệnh Admin: `/exec <mã_PIN> <lệnh_powershell>`\nVí dụ: `/exec 1234 Get-Service`")
+        elif command == "/cmd":
+            if not args:
+                self.client.send_message(chat_id, "⚠️ Cú pháp chạy lệnh CMD: `/cmd <lệnh_windows>`\nVí dụ:\n• `/cmd ipconfig`\n• `/cmd tasklist`\n• `/cmd netstat -ano`\n• `/cmd ping 8.8.8.8`")
                 return
-            pin, cmd_to_run = args[0], " ".join(args[1:])
-            if pin != Config.ADMIN_PIN:
-                self.client.send_message(chat_id, "❌ Mã PIN bảo mật không chính xác!")
+            cmd_text = " ".join(args)
+            self._cmd_exec(chat_id, cmd_text, shell_type="cmd")
+
+        elif command in ("/pshell", "/exec"):
+            if not args:
+                self.client.send_message(chat_id, "⚠️ Cú pháp chạy PowerShell: `/pshell <lệnh>`\nVí dụ: `/pshell Get-Service` hoặc `/pshell Get-Process`")
                 return
-            self._cmd_exec(chat_id, cmd_to_run)
+            cmd_text = " ".join(args)
+            if args[0] == Config.ADMIN_PIN and len(args) > 1:
+                cmd_text = " ".join(args[1:])
+            self._cmd_exec(chat_id, cmd_text, shell_type="powershell")
+
+        elif command in ("/services", "/listening", "/ports"):
+            self._cmd_services(chat_id)
+
+        elif command in ("/ps", "/top", "/procs"):
+            self._cmd_ps(chat_id)
+
+        elif command == "/cleanram":
+            self.client.send_message(chat_id, "⏳ Đang quét và dọn dẹp giải phóng bộ nhớ RAM...")
+            ok, msg = system_monitor.clean_ram()
+            self.client.send_message(chat_id, msg)
+
+        elif command == "/kill":
+            if not args:
+                self.client.send_message(chat_id, "⚠️ Cú pháp: `/kill <PID_hoặc_Tên_tiến_trình>`\nVí dụ: `/kill 4512` hoặc `/kill java.exe`")
+                return
+            target = args[0]
+            ok, msg = system_monitor.kill_process(target)
+            self.client.send_message(chat_id, msg)
 
         elif command == "/reboot":
             if not args or args[0] != Config.ADMIN_PIN:
@@ -367,6 +406,18 @@ class SentinelTelegramBot:
             self._cmd_status(chat_id)
         elif data == "cmd_ip":
             self._cmd_ip(chat_id)
+        elif data == "cmd_services":
+            self._cmd_services(chat_id)
+        elif data == "cmd_ps":
+            self._cmd_ps(chat_id)
+        elif data == "cmd_cleanram":
+            self.client.send_message(chat_id, "⏳ Đang quét và dọn dẹp giải phóng bộ nhớ RAM...")
+            ok, msg = system_monitor.clean_ram()
+            self.client.send_message(chat_id, msg)
+        elif data.startswith("kill_pid_"):
+            pid = data.replace("kill_pid_", "")
+            ok, msg = system_monitor.kill_process(pid)
+            self.client.send_message(chat_id, msg)
         elif data == "cmd_screen":
             self._cmd_screen(chat_id)
         elif data == "cmd_cam":
@@ -436,7 +487,23 @@ class SentinelTelegramBot:
         self.client.send_message(chat_id, "⏳ Đang chụp màn hình desktop...")
         img_path, msg = security_guard.capture_screenshot()
         if img_path and img_path.exists():
-            self.client.send_photo(chat_id, img_path, caption=f"🖥️ Màn hình Desktop lúc {datetime.now().strftime('%H:%M:%S')}")
+            kb = {
+                "inline_keyboard": [
+                    [
+                        {"text": "🔄 Chụp Lại", "callback_data": "cmd_screen"},
+                        {"text": "📷 Chụp Webcam", "callback_data": "cmd_cam"},
+                    ],
+                    [
+                        {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
+                        {"text": "🖥️ Remote Desktop", "callback_data": "cmd_rd"},
+                    ],
+                    [
+                        {"text": "🔙 Menu Chính", "callback_data": "cmd_menu"}
+                    ]
+                ]
+            }
+            caption = f"🖥️ *Màn hình Desktop* ({datetime.now().strftime('%H:%M:%S')})\n_{msg}_"
+            self.client.send_photo(chat_id, img_path, caption=caption, reply_markup=kb)
         else:
             self.client.send_message(chat_id, f"❌ {msg}")
 
@@ -444,7 +511,20 @@ class SentinelTelegramBot:
         self.client.send_message(chat_id, "⏳ Đang kích hoạt webcam chụp ảnh...")
         img_path, msg = security_guard.capture_webcam()
         if img_path and img_path.exists():
-            self.client.send_photo(chat_id, img_path, caption=f"📷 Ảnh Webcam lúc {datetime.now().strftime('%H:%M:%S')}")
+            kb = {
+                "inline_keyboard": [
+                    [
+                        {"text": "🔄 Chụp Lại", "callback_data": "cmd_cam"},
+                        {"text": "📸 Chụp Màn Hình", "callback_data": "cmd_screen"},
+                    ],
+                    [
+                        {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
+                        {"text": "🔙 Menu Chính", "callback_data": "cmd_menu"}
+                    ]
+                ]
+            }
+            caption = f"📷 *Ảnh Webcam* ({datetime.now().strftime('%H:%M:%S')})\n_{msg}_"
+            self.client.send_photo(chat_id, img_path, caption=caption, reply_markup=kb)
         else:
             self.client.send_message(chat_id, f"❌ {msg}")
 
@@ -523,25 +603,99 @@ class SentinelTelegramBot:
         else:
             self.client.send_message(chat_id, "❌ Không thể tải file từ Telegram.")
 
-    def _cmd_exec(self, chat_id: str, cmd: str):
-        self.client.send_message(chat_id, f"⏳ Đang thực thi lệnh Admin:\n`{cmd}`")
+    def _cmd_exec(self, chat_id: str, cmd: str, shell_type: str = "cmd"):
+        shell_label = "Windows CMD" if shell_type == "cmd" else "PowerShell"
+        self.client.send_message(chat_id, f"⏳ Đang thực thi lệnh [{shell_label}]:\n`{cmd}`")
         try:
+            if platform.system().lower() == "windows":
+                if shell_type == "cmd":
+                    args = ["cmd.exe", "/c", cmd]
+                else:
+                    args = ["powershell", "-NoProfile", "-Command", cmd]
+            else:
+                args = ["bash", "-c", cmd]
+
             res = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", cmd] if platform.system().lower() == "windows" else ["bash", "-c", cmd],
+                args,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=45
             )
             out = res.stdout.strip()
             err = res.stderr.strip()
-            result = out or err or "[Lệnh thực thi thành công không có output]"
-            if len(result) > 3800:
-                result = result[:3800] + "\n...(Kết quả quá dài đã được rút gọn)"
-            self.client.send_message(chat_id, f"```powershell\n{result}\n```")
+            result = out or err or "[Lệnh thực thi hoàn tất không có output (Mã thoát: 0)]"
+
+            if len(result) > 3500:
+                preview = result[:3200] + "\n\n...(Kết quả quá dài, toàn bộ log chi tiết đính kèm trong file bên dưới)"
+                self.client.send_message(chat_id, f"```{shell_type}\n{preview}\n```")
+                Config.ensure_directories()
+                temp_log = Config.DATA_DIR / f"cmd_{int(time.time())}.txt"
+                with open(temp_log, "w", encoding="utf-8") as f:
+                    f.write(f"COMMAND: {cmd}\nSHELL: {shell_label}\nTIME: {datetime.now()}\n" + "="*50 + "\n\n" + (out if out else err))
+                self.client.send_document(chat_id, temp_log, caption=f"📄 Kết quả đầy đủ: `{cmd[:60]}`")
+                try:
+                    temp_log.unlink()
+                except Exception:
+                    pass
+            else:
+                self.client.send_message(chat_id, f"```{shell_type}\n{result}\n```")
         except subprocess.TimeoutExpired:
-            self.client.send_message(chat_id, "⚠️ Lệnh vượt quá thời gian chờ (30 giây)!")
+            self.client.send_message(chat_id, "⚠️ Lệnh vượt quá thời gian chờ (45 giây)!")
         except Exception as e:
             self.client.send_message(chat_id, f"❌ Lỗi thực thi: {e}")
+
+    def _cmd_services(self, chat_id: str):
+        self.client.send_message(chat_id, "🔍 Đang quét toàn bộ Port và các dịch vụ đang mở cổng...")
+        services = system_monitor.get_active_listening_services()
+        if not services:
+            self.client.send_message(chat_id, "ℹ️ Hiện không có tiến trình nào đang lắng nghe mở Port.")
+            return
+
+        lines = []
+        kb_rows = []
+        for s in services:
+            desc_tag = f" - *{s['desc']}*" if s['desc'] else ""
+            lines.append(
+                f"• Port `{s['port']}` ({s['protocol']}): `{s['process']}`{desc_tag}\n"
+                f"   ➔ PID: `{s['pid']}` | RAM: `{s['mem_mb']}MB`"
+            )
+            # Add inline quick-kill buttons for non-critical ports
+            if s['pid'] and s['port'] not in (8888, 3389):
+                label = f"🛑 Dừng Port {s['port']} ({s['process'][:12]})"
+                if len(kb_rows) < 6:
+                    kb_rows.append([{"text": label, "callback_data": f"kill_pid_{s['pid']}"}])
+
+        kb_rows.append([
+            {"text": "🔄 Quét Lại", "callback_data": "cmd_services"},
+            {"text": "🔙 Menu Chính", "callback_data": "cmd_menu"}
+        ])
+
+        msg = (
+            "🔌 *DANH SÁCH DỊCH VỤ & PORT ĐANG HOẠT ĐỘNG:*\n"
+            "_(Kiểm tra ứng dụng mạng, Minecraft, 9Router, Web Server, Database, v.v.)_\n\n"
+            + "\n".join(lines)
+        )
+        self.client.send_message(chat_id, msg, reply_markup={"inline_keyboard": kb_rows})
+
+    def _cmd_ps(self, chat_id: str):
+        top_procs = system_monitor.get_top_processes(limit=6)
+        lines = []
+        kb_rows = []
+        for p in top_procs:
+            lines.append(f"• `{p['name']}` (PID: `{p['pid']}`): `{p['mem_mb']}MB RAM` ({p['mem_percent']}%) | CPU `{p['cpu']}%`")
+            kb_rows.append([{"text": f"🛑 Dừng {p['name'][:14]} (PID {p['pid']})", "callback_data": f"kill_pid_{p['pid']}"}])
+
+        kb_rows.append([
+            {"text": "🧹 Dọn Dẹp RAM", "callback_data": "cmd_cleanram"},
+            {"text": "🔙 Menu Chính", "callback_data": "cmd_menu"}
+        ])
+
+        msg = (
+            "⚡ *TOP TIẾN TRÌNH CHIẾM TÀI NGUYÊN CAO NHẤT:*\n\n"
+            + "\n".join(lines)
+            + "\n\n💡 _Bấm nút bên dưới để buộc dừng ứng dụng bị đơ hoặc ngốn RAM._"
+        )
+        self.client.send_message(chat_id, msg, reply_markup={"inline_keyboard": kb_rows})
 
     def _cmd_update_check(self, chat_id: str):
         curr = updater.get_current_version()

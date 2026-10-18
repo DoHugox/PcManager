@@ -85,7 +85,13 @@ Bạn chỉ cần nhắn tin cho Bot Telegram:
 | **Gửi bất kỳ file nào vào Telegram** | Bot sẽ tự động tải file đó và lưu vào máy tính ở Việt Nam |
 | `/mkdir <thư_mục>` | Tạo thư mục mới trên máy chủ |
 | `/rm <mã_PIN> <đường_dẫn>` | Xóa an toàn tệp/thư mục (Ví dụ: `/rm 1234 C:\temp\test.txt`) |
-| `/exec <mã_PIN> <lệnh>` | **Chạy lệnh PowerShell/CMD với quyền Administrator cao nhất** (Ví dụ: `/exec 1234 Get-Service`, `/exec 1234 Restart-Service wuauserv`) |
+| `/cmd <lệnh>` | **Chạy lệnh CMD Windows trực tiếp** (Ví dụ: `/cmd ipconfig`, `/cmd tasklist`, `/cmd netstat -ano`, `/cmd ping 8.8.8.8`) |
+| `/pshell <lệnh>` | Chạy lệnh PowerShell với quyền Administrator (Ví dụ: `/pshell Get-Service`) |
+| `/services` hoặc `/ports` | **Xem tiến trình & dịch vụ nào đang mở port nào** (Tự nhận diện Minecraft Server, 9Router, Web, Database, RDP, v.v. kèm nút dừng tiến trình) |
+| `/ps` hoặc `/top` | **Xem Top ứng dụng chiếm nhiều RAM & CPU nhất** kèm nút tắt ứng dụng bị treo |
+| `/cleanram` | **Dọn dẹp & giải phóng hàng trăm MB RAM tức thì** (tối ưu đặc biệt cho chip Core i3 / RAM yếu) |
+| `/kill <PID hoặc Tên>` | Buộc dừng một tiến trình đang chạy (Ví dụ: `/kill 4512` hoặc `/kill java.exe`) |
+| `/ping` hoặc `/test` | Đo độ trễ phản hồi mạng giữa bot Telegram và máy chủ tại Việt Nam |
 | `/reboot <mã_PIN>` | Khởi động lại máy tính an toàn (`/reboot 1234`) |
 | `/shutdown <mã_PIN>` | Tắt máy tính (`/shutdown 1234`) |
 | `/update check` | Kiểm tra xem trên GitHub có bản cập nhật mới hay không |

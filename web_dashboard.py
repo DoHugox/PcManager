@@ -18,6 +18,7 @@ import threading
 import urllib.parse
 import subprocess
 from pathlib import Path
+from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from config import Config
@@ -435,6 +436,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             <button class="tab-btn" id="btn-tab-network" onclick="switchTab('tab-network')">
                 🛡️ Mạng & Tường Lửa (Firewall)
             </button>
+            <button class="tab-btn" id="btn-tab-terminal" onclick="switchTab('tab-terminal')">
+                💻 CMD Terminal & Dịch Vụ Port
+            </button>
             <button class="tab-btn" id="btn-tab-updates" onclick="switchTab('tab-updates')">
                 🔄 Phiên Bản & Cập Nhật
             </button>
@@ -450,6 +454,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 <button class="btn btn-primary" style="background: var(--gradient-accent);" onclick="triggerAction('cam')">📷 Chụp Webcam Kẻ Ngồi Máy</button>
                 <button class="btn btn-danger" onclick="triggerAction('lock')">🔒 Khóa Màn Hình Lập Tức</button>
                 <button class="btn btn-secondary" id="btn-rd-toggle" onclick="toggleRD('on')">🖥️ Bật RustDesk Remote Desktop</button>
+                <button class="btn btn-secondary" onclick="triggerAction('test_telegram')">🔔 Test Gửi Telegram</button>
+                <button class="btn btn-secondary" onclick="minimizeToTray()">⬇️ Thu Nhỏ Xuống Khay</button>
             </div>
 
             <!-- Top Network & Telemetry Cards -->
@@ -730,6 +736,72 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </p>
             </div>
         </div>
+
+        <!-- ============================================================ -->
+        <!-- TAB 5: CMD TERMINAL & ACTIVE SERVICES INSPECTOR -->
+        <!-- ============================================================ -->
+        <div class="tab-content" id="tab-terminal">
+            <!-- Active Services & Ports Table -->
+            <div class="card" style="margin-bottom: 22px;">
+                <div class="card-header">
+                    <div>
+                        <span class="card-title">🔌 Dịch Vụ & Ứng Dụng Đang Sử Dụng Port (Active Services)</span>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+                            Tự động nhận diện Minecraft Server, 9Router, Web Server, Database, Remote Desktop,... đang mở cổng mạng.
+                        </p>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px;" onclick="triggerAction('cleanram')">🧹 Dọn Dẹp RAM</button>
+                        <button class="copy-btn" onclick="fetchActiveServices()">🔄 Quét Lại Port</button>
+                    </div>
+                </div>
+
+                <div class="table-container" style="max-height: 380px; overflow-y: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>PORT / GIAO THỨC</th>
+                                <th>TIẾN TRÌNH (PROCESS)</th>
+                                <th>DỊCH VỤ NHẬN DIỆN</th>
+                                <th>PID & BỘ NHỚ RAM</th>
+                                <th style="text-align: right;">HÀNH ĐỘNG</th>
+                            </tr>
+                        </thead>
+                        <tbody id="services-tbody">
+                            <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">Đang quét các dịch vụ đang mở cổng...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Web & Desktop CMD Terminal -->
+            <div class="card">
+                <div class="card-header">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span class="card-title">💻 Điều Khiển Dòng Lệnh CMD & PowerShell (Remote Terminal)</span>
+                        <span class="status-badge" style="background: rgba(0,242,254,0.1); border-color: rgba(0,242,254,0.3); color: var(--accent-cyan); font-size: 11px; padding: 3px 10px;">
+                            Administrator Privileges
+                        </span>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <select id="terminal-shell" style="background: rgba(14, 20, 36, 0.8); border: 1px solid var(--border-glass); color: var(--text-primary); padding: 6px 12px; border-radius: 8px; font-size: 13px;">
+                            <option value="cmd">Windows CMD.exe</option>
+                            <option value="powershell">PowerShell.exe</option>
+                        </select>
+                        <button class="copy-btn" onclick="clearTerminal()">🧹 Xóa Màn Hình</button>
+                    </div>
+                </div>
+
+                <div style="background: #05070e; border: 1px solid var(--border-glass); border-radius: 12px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 13px; margin-top: 10px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.7);">
+                    <div id="terminal-output" style="min-height: 220px; max-height: 380px; overflow-y: auto; color: #a5f3fc; white-space: pre-wrap; line-height: 1.5; padding-bottom: 10px;">PcManager Administrator Console [Version 1.0.8]&#10;Gõ lệnh bất kỳ (ví dụ: ipconfig, tasklist, netstat -ano, dir) và nhấn Enter để thực thi...&#10;</div>
+                    <div style="display: flex; align-items: center; gap: 8px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px;">
+                        <span style="color: var(--accent-cyan); font-weight: 700;" id="terminal-prompt">C:\&gt;</span>
+                        <input type="text" id="terminal-input" placeholder="Nhập lệnh CMD hoặc PowerShell..." style="flex: 1; background: transparent; border: none; outline: none; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 13px;" onkeydown="handleTerminalKey(event)">
+                        <button class="btn btn-primary" style="padding: 6px 16px; font-size: 12px;" onclick="runTerminalCommand()">▶️ Chạy Lệnh</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ============================================================ -->
@@ -817,6 +889,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Modal Xem Ảnh Trực Tiếp (Image Preview Modal) -->
+    <div class="modal" id="modal-image-preview">
+        <div class="modal-box modal-box-large" style="max-width: 960px; text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 16px; color: var(--accent-cyan);" id="image-preview-title">Xem Ảnh Chụp</h3>
+                <span style="font-size: 12px; color: var(--text-muted);" id="image-preview-time"></span>
+            </div>
+            <div style="background: rgba(0,0,0,0.6); border-radius: 12px; padding: 10px; border: 1px solid var(--border-glass); max-height: 70vh; overflow: auto; display: flex; align-items: center; justify-content: center;">
+                <img id="image-preview-img" src="" style="max-width: 100%; max-height: 65vh; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.6);" alt="Snapshot">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+                <a id="image-preview-download" href="#" download class="btn btn-secondary" style="padding: 6px 14px; font-size: 13px; text-decoration: none;">💾 Tải Ảnh Về Máy</a>
+                <button class="btn btn-primary" onclick="closeModal('modal-image-preview')">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" style="position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; pointer-events: none;"></div>
+
     <!-- ============================================================ -->
     <!-- JAVASCRIPT LOGIC -->
     <!-- ============================================================ -->
@@ -833,6 +925,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 if (!currentPath) loadDirectory('');
             }
             if (tabId === 'tab-network') document.getElementById('btn-tab-network').classList.add('active');
+            if (tabId === 'tab-terminal') {
+                document.getElementById('btn-tab-terminal').classList.add('active');
+                fetchActiveServices();
+                setTimeout(() => {
+                    const inp = document.getElementById('terminal-input');
+                    if (inp) inp.focus();
+                }, 100);
+            }
             if (tabId === 'tab-updates') {
                 document.getElementById('btn-tab-updates').classList.add('active');
                 checkAppUpdate();
@@ -911,6 +1011,46 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             }
         }
 
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            if (!container) return;
+            const toast = document.createElement('div');
+            toast.style.cssText = 'pointer-events: auto; padding: 12px 20px; border-radius: 12px; background: rgba(14, 20, 36, 0.95); border: 1px solid var(--border-glow); color: var(--text-primary); font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(16px); transition: all 0.3s ease; transform: translateY(20px); opacity: 0;';
+            if (type === 'error') {
+                toast.style.borderColor = 'var(--accent-red)';
+                toast.style.color = '#ff6b8b';
+            } else if (type === 'success') {
+                toast.style.borderColor = 'var(--accent-green)';
+                toast.style.color = 'var(--accent-green)';
+            }
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => {
+                toast.style.transform = 'translateY(0)';
+                toast.style.opacity = '1';
+            });
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 4500);
+        }
+
+        function openImagePreview(url, title = 'Xem Ảnh Chụp') {
+            document.getElementById('image-preview-title').textContent = title;
+            document.getElementById('image-preview-img').src = url;
+            document.getElementById('image-preview-download').href = url;
+            document.getElementById('image-preview-time').textContent = new Date().toLocaleTimeString();
+            openModal('modal-image-preview');
+        }
+
+        async function minimizeToTray() {
+            showToast("Đang thu nhỏ vào khay hệ thống (System Tray)...", "info");
+            try {
+                await fetch('/api/action?type=hide_window', { method: 'POST' });
+            } catch (e) {}
+        }
+
         async function fetchSnapshots() {
             try {
                 const res = await fetch('/api/snapshots');
@@ -921,7 +1061,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                     return;
                 }
                 grid.innerHTML = snaps.map(s => `
-                    <div class="gallery-item" onclick="window.open('/snapshots/${s.name}', '_blank')">
+                    <div class="gallery-item" onclick="openImagePreview('/snapshots/${s.name}', '${s.name.startsWith('cam') ? '📷 Ảnh Webcam' : '🖥️ Màn Hình Desktop'}')">
                         <img src="/snapshots/${s.name}" alt="${s.name}" loading="lazy">
                         <div class="gallery-cap">
                             <span>${s.name.startsWith('cam') ? '📷 Webcam' : '🖥️ Desktop'}</span>
@@ -933,19 +1073,146 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         async function toggleRD(action) {
-            await fetch(`/api/rd?action=${action}`, { method: 'POST' });
+            showToast(action === 'on' ? "⏳ Đang bật RustDesk..." : "⏳ Đang tắt RustDesk...", "info");
+            const res = await fetch(`/api/rd?action=${action}`, { method: 'POST' });
+            const data = await res.json();
+            showToast(data.message, data.success ? "success" : "info");
             fetchStatus();
         }
 
         async function triggerAction(act) {
-            const res = await fetch(`/api/action?type=${act}`, { method: 'POST' });
-            const data = await res.json();
-            alert(data.message);
-            fetchStatus();
+            let label = "yêu cầu";
+            if (act === 'screen') label = "chụp màn hình desktop";
+            else if (act === 'cam') label = "chụp webcam";
+            else if (act === 'lock') label = "khóa máy";
+            else if (act === 'test_telegram') label = "gửi tin nhắn test tới Telegram";
+
+            showToast(`⏳ Đang xử lý ${label}...`, "info");
+            try {
+                const res = await fetch(`/api/action?type=${act}`, { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message, data.success !== false ? "success" : "error");
+                fetchStatus();
+                if (act === 'screen' || act === 'cam') {
+                    fetchSnapshots();
+                    if (data.image_url) {
+                        openImagePreview(data.image_url, act === 'screen' ? '🖥️ Màn Hình Desktop Vừa Chụp' : '📷 Ảnh Webcam Vừa Chụp');
+                    }
+                }
+            } catch (e) {
+                showToast("Lỗi kết nối máy chủ: " + e, "error");
+            }
         }
 
         // ==========================================
-        // FILE EXPLORER & WEB SCP TRANSFER
+        // ACTIVE SERVICES & CMD TERMINAL LOGIC
+        // ==========================================
+        let cmdHistory = [];
+        let historyIndex = -1;
+
+        async function fetchActiveServices() {
+            const tbody = document.getElementById('services-tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">⏳ Đang quét danh sách Port & Tiến trình...</td></tr>';
+            try {
+                const res = await fetch('/api/services');
+                const list = await res.json();
+                if (!list || list.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 25px;">Không phát hiện dịch vụ nào đang mở port.</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = list.map(s => {
+                    const isPcManager = s.port === 8888;
+                    const killBtn = s.pid && !isPcManager ? `<button class="btn btn-danger" style="padding: 4px 10px; font-size: 12px;" onclick="killService('${s.pid}', '${s.process}')">🛑 Tắt (Kill)</button>` : '<span style="color: var(--text-muted); font-size: 12px;">Hệ thống</span>';
+                    const openPortBtn = `<button class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px; margin-right: 6px;" onclick="quickOpenPort(${s.port}, '${s.protocol}')">🌐 Mở Ra Router</button>`;
+                    const descColor = s.desc.startsWith('🎮') ? 'var(--accent-green)' : s.desc.startsWith('🌐') ? 'var(--accent-blue)' : s.desc.startsWith('🖥️') ? 'var(--accent-amber)' : 'var(--text-secondary)';
+                    return `
+                        <tr>
+                            <td><span style="font-weight: 700; color: var(--accent-cyan); font-size: 15px;">${s.port}</span> <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.06);">${s.protocol}</span></td>
+                            <td><span style="font-weight: 600; color: #fff;">${s.process}</span></td>
+                            <td><span style="color: ${descColor}; font-weight: 600;">${s.desc || 'Ứng dụng mạng'}</span></td>
+                            <td><span style="color: var(--text-secondary); font-size: 12px;">PID: ${s.pid || 'N/A'}</span> ${s.mem_mb ? `<span style="margin-left: 8px; color: var(--accent-purple); font-weight: 600;">${s.mem_mb} MB RAM</span>` : ''}</td>
+                            <td style="text-align: right;">${openPortBtn}${killBtn}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--accent-red); padding: 25px;">Lỗi khi quét: ${e}</td></tr>`;
+            }
+        }
+
+        async function killService(pid, name) {
+            if (!confirm(`Bạn có chắc chắn muốn buộc dừng tiến trình ${name} (PID: ${pid}) không?`)) return;
+            showToast(`Đang dừng tiến trình ${name}...`, "info");
+            try {
+                const res = await fetch(`/api/services/kill?pid=${pid}`, { method: 'POST' });
+                const data = await res.json();
+                showToast(data.message, data.success ? "success" : "error");
+                fetchActiveServices();
+            } catch (e) {
+                showToast("Lỗi kết nối: " + e, "error");
+            }
+        }
+
+        function quickOpenPort(port, proto) {
+            document.getElementById('inp-ext-port').value = port;
+            document.getElementById('inp-int-port').value = port;
+            document.getElementById('inp-proto').value = proto || 'TCP';
+            openModal('modal-port');
+        }
+
+        async function runTerminalCommand() {
+            const inp = document.getElementById('terminal-input');
+            const cmd = inp.value.trim();
+            if (!cmd) return;
+
+            const shell = document.getElementById('terminal-shell').value;
+            const out = document.getElementById('terminal-output');
+
+            cmdHistory.push(cmd);
+            historyIndex = cmdHistory.length;
+            inp.value = '';
+
+            out.textContent += `\nC:\\VNServerSentinel> [${shell.toUpperCase()}] ${cmd}\n`;
+            out.scrollTop = out.scrollHeight;
+
+            try {
+                const res = await fetch('/api/cmd/exec', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cmd: cmd, shell: shell })
+                });
+                const data = await res.json();
+                out.textContent += `${data.output}\n`;
+                out.scrollTop = out.scrollHeight;
+            } catch (e) {
+                out.textContent += `[Lỗi kết nối: ${e}]\n`;
+                out.scrollTop = out.scrollHeight;
+            }
+        }
+
+        function clearTerminal() {
+            document.getElementById('terminal-output').textContent = 'PcManager Administrator Console [Version 1.0.8]\n';
+        }
+
+        function handleTerminalKey(e) {
+            if (e.key === 'Enter') {
+                runTerminalCommand();
+            } else if (e.key === 'ArrowUp') {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    document.getElementById('terminal-input').value = cmdHistory[historyIndex];
+                }
+            } else if (e.key === 'ArrowDown') {
+                if (historyIndex < cmdHistory.length - 1) {
+                    historyIndex++;
+                    document.getElementById('terminal-input').value = cmdHistory[historyIndex];
+                } else {
+                    historyIndex = cmdHistory.length;
+                    document.getElementById('terminal-input').value = '';
+                }
+            }
+        }
         // ==========================================
         let currentPath = '';
         let parentPath = '';
@@ -1371,6 +1638,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             info = updater.get_version_info()
             self._send_json(info)
 
+        elif path == "/api/services":
+            services = system_monitor.get_active_listening_services()
+            self._send_json(services)
+
         # File Explorer GET endpoints
         elif path == "/api/files/list":
             target_path = params.get("path", [""])[0]
@@ -1450,15 +1721,83 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         elif url.path == "/api/action":
             act_type = params.get("type", [""])[0]
+            p = None
+            success = True
             if act_type == "screen":
                 p, msg = security_guard.capture_screenshot()
+                success = bool(p)
             elif act_type == "cam":
                 p, msg = security_guard.capture_webcam()
+                success = bool(p)
             elif act_type == "lock":
                 ok, msg = security_guard.lock_workstation()
+                success = ok
+            elif act_type == "hide_window":
+                try:
+                    import desktop_ui
+                    desktop_ui.DesktopUIManager.get_instance().hide_window()
+                    msg = "Đã thu nhỏ ứng dụng xuống khay hệ thống (System Tray)."
+                except Exception as e:
+                    msg = f"Không thể ẩn cửa sổ: {e}"
+            elif act_type == "test_telegram":
+                try:
+                    import telegram_bot
+                    bot = telegram_bot.SentinelTelegramBot(self.upnp_mgr)
+                    bot.notify_admin(f"🔔 *THÔNG BÁO KIỂM TRA TỪ PCMANAGER*\n\nKết nối giữa ứng dụng và Telegram của bạn hoạt động 100%! Thời gian: `{datetime.now().strftime('%H:%M:%S')}`")
+                    msg = "Đã gửi thông báo thử nghiệm thành công tới tài khoản Telegram của bạn!"
+                except Exception as e:
+                    msg = f"Lỗi khi gửi tin nhắn Telegram: {e}"
+                    success = False
+            elif act_type == "cleanram":
+                ok, msg = system_monitor.clean_ram()
+                success = ok
             else:
                 msg = "Hành động không xác định"
-            self._send_json({"message": msg})
+                success = False
+
+            self._send_json({
+                "message": msg,
+                "success": success,
+                "image_url": f"/snapshots/{p.name}" if (p and p.exists()) else None
+            })
+
+        elif url.path == "/api/services/kill":
+            pid = params.get("pid", [""])[0]
+            ok, msg = system_monitor.kill_process(pid)
+            self._send_json({"success": ok, "message": msg})
+
+        elif url.path == "/api/cmd/exec":
+            content_len = int(self.headers.get("Content-Length", 0))
+            post_data = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
+            try:
+                data = json.loads(post_data) if post_data else {}
+            except Exception:
+                data = {}
+            cmd = data.get("cmd", "") or params.get("cmd", [""])[0]
+            shell = data.get("shell", "cmd") or params.get("shell", ["cmd"])[0]
+
+            if not cmd:
+                self._send_json({"success": False, "output": "Vui lòng nhập câu lệnh để thực thi."})
+                return
+
+            try:
+                if platform.system().lower() == "windows":
+                    args = ["cmd.exe", "/c", cmd] if shell == "cmd" else ["powershell", "-NoProfile", "-Command", cmd]
+                else:
+                    args = ["bash", "-c", cmd]
+
+                res = subprocess.run(
+                    args,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                output = res.stdout or res.stderr or "[Lệnh hoàn tất thành công (Exit Code 0)]"
+                self._send_json({"success": res.returncode == 0, "output": output, "code": res.returncode})
+            except subprocess.TimeoutExpired:
+                self._send_json({"success": False, "output": "⚠️ Lệnh vượt quá thời gian chờ (30 giây)!"})
+            except Exception as e:
+                self._send_json({"success": False, "output": f"Lỗi thực thi: {e}"})
 
         elif url.path == "/api/ports/open":
             ext = int(params.get("ext", [0])[0])
