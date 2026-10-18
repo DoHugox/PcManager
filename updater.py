@@ -6,12 +6,14 @@ if the new version fails to establish network/Telegram connection within 60s.
 
 import os
 import sys
+import time
 import json
 import shutil
 import logging
 import zipfile
 import subprocess
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 

@@ -28,6 +28,8 @@ logger = logging.getLogger("VNServerSentinel.DesktopUI")
 # Check GUI library availability
 USE_CUSTOMTKINTER = False
 USE_TKINTER = False
+ModernNativeApp = None
+ClassicTkinterApp = None
 
 try:
     import customtkinter as ctk
