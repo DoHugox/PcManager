@@ -152,7 +152,7 @@ class SentinelTelegramBot:
                 ],
                 [
                     {"text": "🧹 Dọn Dẹp RAM", "callback_data": "cmd_cleanram"},
-                    {"text": "🚪 Mở/Đóng Port Router", "callback_data": "cmd_ports"}
+                    {"text": "☕ Giữ Màn Hình Sáng", "callback_data": "cmd_awake"}
                 ],
                 [
                     {"text": "📁 Quản Lý Tệp", "callback_data": "cmd_files"},
@@ -160,6 +160,9 @@ class SentinelTelegramBot:
                 ],
                 [
                     {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
+                    {"text": "🚪 Mở/Đóng Port Router", "callback_data": "cmd_ports"}
+                ],
+                [
                     {"text": "🔄 Check Update", "callback_data": "cmd_update"}
                 ]
             ]
@@ -341,6 +344,20 @@ class SentinelTelegramBot:
             ok, msg = system_monitor.clean_ram()
             self.client.send_message(chat_id, msg)
 
+        elif command == "/awake":
+            if args and args[0].lower() in ("on", "1", "enable"):
+                ok, msg = security_guard.set_awake_mode(True)
+                self.client.send_message(chat_id, msg)
+            elif args and args[0].lower() in ("off", "0", "disable"):
+                ok, msg = security_guard.set_awake_mode(False)
+                self.client.send_message(chat_id, msg)
+            else:
+                self._cmd_awake_menu(chat_id)
+
+        elif command == "/wake":
+            security_guard.wake_display()
+            self.client.send_message(chat_id, "☀️ Đã gửi tín hiệu đánh thức màn hình máy chủ thành công!")
+
         elif command == "/kill":
             if not args:
                 self.client.send_message(chat_id, "⚠️ Cú pháp: `/kill <PID_hoặc_Tên_tiến_trình>`\nVí dụ: `/kill 4512` hoặc `/kill java.exe`")
@@ -447,8 +464,42 @@ class SentinelTelegramBot:
         elif data == "rd_off":
             ok, msg = remote_desktop.stop_remote_desktop()
             self.client.send_message(chat_id, msg)
+        elif data == "cmd_awake":
+            self._cmd_awake_menu(chat_id)
+        elif data == "awake_on":
+            ok, msg = security_guard.set_awake_mode(True)
+            self.client.send_message(chat_id, msg)
+        elif data == "awake_off":
+            ok, msg = security_guard.set_awake_mode(False)
+            self.client.send_message(chat_id, msg)
+        elif data == "cmd_wake":
+            security_guard.wake_display()
+            self.client.send_message(chat_id, "☀️ Đã gửi tín hiệu đánh thức màn hình máy chủ thành công!")
         elif data == "cmd_menu":
             self.client.send_message(chat_id, "🛡️ *Menu Điều Khiển Máy Chủ:*", reply_markup=self.get_main_menu_keyboard())
+
+    def _cmd_awake_menu(self, chat_id: str):
+        is_awake = security_guard.get_awake_mode()
+        kb = {
+            "inline_keyboard": [
+                [
+                    {"text": "🟢 Bật Giữ Sáng (Awake ON)", "callback_data": "awake_on"},
+                    {"text": "🛑 Tắt Giữ Sáng (Awake OFF)", "callback_data": "awake_off"}
+                ],
+                [
+                    {"text": "☀️ Đánh Thức Màn Hình Ngay", "callback_data": "cmd_wake"},
+                    {"text": "🔙 Menu Chính", "callback_data": "cmd_menu"}
+                ]
+            ]
+        }
+        st = "🟢 ĐANG BẬT (Màn hình luôn sáng, không tắt/sleep)" if is_awake else "💤 ĐANG TẮT (Windows tự tắt màn hình khi rảnh)"
+        self.client.send_message(
+            chat_id,
+            f"☕ *CHẾ ĐỘ GIỮ MÀN HÌNH SÁNG (AWAKE / NO-SLEEP)*\n\n"
+            f"Trạng thái: *{st}*\n\n"
+            f"💡 _Khi BẬT, máy chủ sẽ ngăn Windows tắt màn hình và không cho máy rơi vào trạng thái ngủ/khóa, giúp bạn luôn chụp được màn hình desktop từ xa!_",
+            reply_markup=kb
+        )
 
     def _cmd_status(self, chat_id: str):
         stats = system_monitor.get_hardware_status()
@@ -494,10 +545,11 @@ class SentinelTelegramBot:
                         {"text": "📷 Chụp Webcam", "callback_data": "cmd_cam"},
                     ],
                     [
-                        {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
+                        {"text": "☕ Giữ Màn Hình Sáng", "callback_data": "cmd_awake"},
                         {"text": "🖥️ Remote Desktop", "callback_data": "cmd_rd"},
                     ],
                     [
+                        {"text": "🔒 Khóa Máy Ngay", "callback_data": "cmd_lock"},
                         {"text": "🔙 Menu Chính", "callback_data": "cmd_menu"}
                     ]
                 ]

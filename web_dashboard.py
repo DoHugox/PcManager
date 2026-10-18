@@ -1751,6 +1751,14 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             elif act_type == "cleanram":
                 ok, msg = system_monitor.clean_ram()
                 success = ok
+            elif act_type == "awake_toggle":
+                cur = security_guard.get_awake_mode()
+                ok, msg = security_guard.set_awake_mode(not cur)
+                success = ok
+            elif act_type == "wake":
+                security_guard.wake_display()
+                msg = "Đã gửi tín hiệu đánh thức màn hình máy chủ!"
+                success = True
             else:
                 msg = "Hành động không xác định"
                 success = False

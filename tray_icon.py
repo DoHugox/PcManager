@@ -70,6 +70,10 @@ class SystemTrayManager:
         else:
             remote_desktop.start_remote_desktop()
 
+    def _toggle_awake(self, icon=None, item=None):
+        cur = security_guard.get_awake_mode()
+        security_guard.set_awake_mode(not cur)
+
     def _exit_app(self, icon=None, item=None):
         logger.info("Exiting application completely from system tray...")
         try:
@@ -105,6 +109,7 @@ class SystemTrayManager:
                 pystray.Menu.SEPARATOR,
                 item("📸 Chụp Màn Hình Ngay", self._action_screen),
                 item("📷 Chụp Webcam Kẻ Ngồi Máy", self._action_cam),
+                item("☕ Giữ Màn Hình Luôn Sáng (Awake)", self._toggle_awake),
                 item("🔒 Khóa Màn Hình Lập Tức", self._action_lock),
                 item("🖥️ Bật/Tắt RustDesk Remote Desktop", self._toggle_rd),
                 pystray.Menu.SEPARATOR,
