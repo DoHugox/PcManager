@@ -421,7 +421,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                 </div>
                 <div class="version-badge" id="header-version-badge" onclick="switchTab('tab-updates')">
                     <span>🏷️</span>
-                    <span id="header-version-text">v1.0.1</span>
+                    <span id="header-version-text">v1.1.6</span>
                 </div>
             </div>
         </header>
@@ -1193,7 +1193,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         function clearTerminal() {
-            document.getElementById('terminal-output').textContent = 'PcManager Administrator Console [Version 1.0.8]\n';
+            document.getElementById('terminal-output').textContent = `PcManager Administrator Console [Version 1.1.6]\n`;
         }
 
         function handleTerminalKey(e) {
